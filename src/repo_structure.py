@@ -9,7 +9,7 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.utils import make_safe_request, get_headers, logger
+from src.utils import make_safe_request, get_headers, logger, get_languages
 
 
 SUPPORTED_LANGUAGES = ["python", "jupyter-notebook"]
@@ -26,15 +26,7 @@ class RepoStructureExtractor:
         self.headers = get_headers(api_token)
         self.retry_attempts = retry_attempts
         self.timeout = timeout
-        self.languages = self.get_languages(languages)
-
-    @staticmethod
-    def get_languages(language) -> list:
-        language = language or SUPPORTED_LANGUAGES
-        if isinstance(language, str):
-            language = [language]
-
-        return language
+        self.languages = get_languages(languages)
 
     def get_repo_structure(self, full_name: str, branch: str):
         url = f"https://api.github.com/repos/{full_name}/git/trees/{branch}?recursive=1"

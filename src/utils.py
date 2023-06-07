@@ -10,6 +10,21 @@ from pyspark.sql import SparkSession
 
 os.environ["PYARROW_IGNORE_TIMEZONE"] = "1"
 API_TOKEN = os.getenv("API_TOKEN")
+SUPPORTED_LANGUAGES = [
+    "python",
+    "jupyter-notebook",
+    "markdown",
+    "html",
+    "shell",
+    "java",
+    "javascript",
+    "typescript",
+    "c",
+    "cpp",
+    "csharp",
+    "rust",
+    "go",
+]
 
 
 class Logger:
@@ -67,3 +82,11 @@ def get_headers(api_token=None):
 
 def decode_content(content):
     return base64.b64decode(content).decode("utf-8")
+
+
+def get_languages(value) -> list:
+    output = value or SUPPORTED_LANGUAGES
+    if isinstance(output, str):
+        output = output.split(",")
+
+    return output

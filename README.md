@@ -34,3 +34,11 @@ Remove the virtual environment:
 conda deactivate
 conda env remove --name=$EVN_NAME
 ```
+
+## Run Dashboard
+```
+PYTHONPATH=. streamlit run src/app.py
+```
+
+# References:
+- https://docs.streamlit.io/library/api-reference

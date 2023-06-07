@@ -11,25 +11,10 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.utils import make_safe_request, get_headers, logger
+from src.utils import make_safe_request, get_headers, logger, get_languages, SUPPORTED_LANGUAGES
 
 
 BASE_URL = "https://api.github.com/search/repositories"
-SUPPORTED_LANGUAGES = [
-    "python",
-    "jupyter-notebook",
-    "markdown",
-    "html",
-    "shell",
-    "java",
-    "javascript",
-    "typescript",
-    "c",
-    "cpp",
-    "csharp",
-    "rust",
-    "go",
-]
 
 
 class RepoMetadataExtractor:
@@ -204,7 +189,7 @@ def main():
     parser.add_argument("--start_date", default="2020-01-01")
     parser.add_argument("--end_date", default=None)
     parser.add_argument("--output_dir", default="./data/raw/repositories")
-    parser.add_argument("--languages", default="")
+    parser.add_argument("--languages", default=None)
     parser.add_argument("--min_pushed_date", default="2020-01-01")
     parser.add_argument("--min_stars_count", type=int, default=1)
     parser.add_argument("--api_token")
@@ -214,15 +199,11 @@ def main():
     args = parser.parse_args()
     logger.info(f"Args: {args}")
 
-    languages = args.languages
-    if languages:
-        languages = languages.split(",")
-
     extract_repo_metadata(
         start_date=args.start_date,
         end_date=args.end_date,
         output_dir=args.output_dir,
-        languages=languages,
+        languages=get_languages(args.languages),
         min_stars_count=args.min_stars_count,
         min_pushed_date=args.min_pushed_date,
         pagination_timeout=args.pagination_timeout,

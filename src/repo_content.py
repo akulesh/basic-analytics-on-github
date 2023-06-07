@@ -161,6 +161,7 @@ def main():
         limit=args.limit,
         overwrite_existed_files=args.overwrite_existed_files,
         api_token=args.api_token,
+        language=args.language,
     )
 
 
