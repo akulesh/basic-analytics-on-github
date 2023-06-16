@@ -4,6 +4,21 @@
 - PySpark
 - Prefect
 - Terraform
+- PostgreSQL
+
+## Docker
+```
+docker-compose up --build
+
+docker exec -it <CONTAINER_ID> <CMD>
+
+docker-compose down --volumes
+```
+
+## PostgreSQL
+```
+psql --username=postgres --dbname=postgres
+```
 
 ## Virtual environment setup
 

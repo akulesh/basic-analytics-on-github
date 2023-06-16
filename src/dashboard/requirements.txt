@@ -1,0 +1,8 @@
+black
+ipykernel
+isort
+pandas
+plotlypyarrow
+pyspark
+streamlit
+wordcloud

@@ -1,5 +1,7 @@
 """
 Github API scrapping
+
+TODO: add upload date
 """
 
 import argparse

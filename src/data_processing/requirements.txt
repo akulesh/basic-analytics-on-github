@@ -1,0 +1,6 @@
+
+pandas
+prefect
+psycopg2-binary
+sqlalchemy
+tqdm

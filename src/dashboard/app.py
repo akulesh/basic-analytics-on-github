@@ -1,5 +1,6 @@
+# from datetime import datetime
+
 import os
-from datetime import datetime
 
 import plotly.express as px
 import streamlit as st
@@ -15,13 +16,19 @@ OUTPUT_DIR = (
 )
 
 
+def reduce_category_column(df, column, top_n=10, value="__OTHER__"):
+    values = df[column].value_counts()[:top_n].index
+    df = df.copy()
+    df.loc[~df[column].isin(values), column] = value
+
+    return df
+
+
 @st.cache_data
 def load_data():
     spark = get_spark_session()
     repos = spark.read.parquet(os.path.join(OUTPUT_DIR, "repos")).toPandas()
     repos = repos.drop_duplicates()
-    repos["has_license"] = repos["license"] != "__NA__"
-    repos["last_pushed_date"] = pd.to_datetime(repos["pushed_at"]).dt.year
     topics = spark.read.parquet(os.path.join(OUTPUT_DIR, "topics")).toPandas()
 
     return repos, topics
@@ -31,7 +38,7 @@ def load_data():
 def get_base_metrics(repos, topics):
     config = {
         "id": {"f": "nunique", "format": int},
-        "repo_owner": {"f": "nunique", "format": int},
+        "owner": {"f": "nunique", "format": int},
         "language": {"f": "nunique", "format": int},
         "created_at": {"f": ["min", "max"], "format": pd.Timestamp},
         "pushed_at": {"f": ["min", "max"], "format": pd.Timestamp},
@@ -85,14 +92,14 @@ def add_date_picker(repos):
     cols = st.sidebar.columns(2)
     cols[0].date_input(
         label="Select start date",
-        value=st.session_state.start_date,
+        value=min_date,
         min_value=min_date,
         max_value=max_date,
         key="start_date",
     )
     cols[1].date_input(
         label="Select end date",
-        value=st.session_state.end_date,
+        value=max_date,
         min_value=min_date,
         max_value=max_date,
         key="end_date",
@@ -196,7 +203,7 @@ def add_basic_report(repos):
 
     with cols[1]:
         # Number of repositories grouped by the year of the last push
-        df = repos.groupby("last_pushed_date")["id"].nunique().reset_index()
+        df = repos.groupby("pushed_at_year")["id"].nunique().reset_index()
         df.columns = ["Date updated", "Number of repositories"]
         fig = px.bar(
             df,
