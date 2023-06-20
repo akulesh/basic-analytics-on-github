@@ -57,3 +57,5 @@ PYTHONPATH=. streamlit run src/app.py
 
 # References:
 - https://docs.streamlit.io/library/api-reference
+- https://geshan.com.np/blog/2021/12/docker-postgres/
+- https://www.datacamp.com/tutorial/wordcloud-python

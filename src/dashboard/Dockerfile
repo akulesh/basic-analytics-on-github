@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -6,13 +6,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt /app
+COPY src/dashboard/requirements.txt /app
 RUN pip install -r requirements.txt
 
-COPY src/ /app
+COPY src/dashboard /app/src/dashboard
+COPY src/utils /app/src/utils
 
+ENV PYTHONPATH=/app
 EXPOSE 8501
 
-ENTRYPOINT ["bash"]
-
-# ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+ENTRYPOINT ["streamlit", "run", "src/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]

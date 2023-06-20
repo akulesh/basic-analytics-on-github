@@ -9,13 +9,17 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.utils import make_safe_request, get_headers, logger, get_languages
+from src.utils.api import make_safe_request, get_headers
+from src.utils.logger import logger
+from src.data_extraction.utils import get_languages
 
 
 SUPPORTED_LANGUAGES = ["python", "jupyter-notebook"]
 
 
 class RepoStructureExtractor:
+    """Extraction of repository structure"""
+
     def __init__(
         self,
         api_token: str = None,

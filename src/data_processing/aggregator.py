@@ -18,6 +18,7 @@ class DataAggregator:
             "language",
             license,
             default_branch,
+            DATE_TRUNC('month', creation_date) AS creation_date,
             DATE_PART('year', creation_date) AS creation_year,
             DATE_PART('month', creation_date) AS creation_month,
             DATE_PART('year', last_commit_date) AS last_commit_year,
@@ -37,7 +38,14 @@ class DataAggregator:
             CEIL(AVG(days_since_creation)) AS days_since_creation,
             CEIL(AVG(days_since_last_commit)) AS days_since_last_commit
         FROM {self.schema}.repo AS r
-        GROUP BY "language", license, default_branch, creation_year, creation_month, last_commit_year, last_commit_month;
+        GROUP BY "language",
+                 license,
+                 default_branch,
+                 creation_date,
+                 creation_year,
+                 creation_month,
+                 last_commit_year,
+                 last_commit_month;
         """
         self.db.execute(q)
 
@@ -50,12 +58,13 @@ class DataAggregator:
         SELECT
             r."language",
             topic,
+            DATE_TRUNC('month', creation_date) AS creation_date,
             DATE_PART('year', creation_date) AS creation_year,
             DATE_PART('month', creation_date) AS creation_month,
             COUNT(DISTINCT rt.repo_id) AS n_repos
         FROM {self.schema}.repo_topic AS rt
         JOIN {self.schema}.repo AS r ON r.id = rt.repo_id
-        GROUP BY r."language", topic, creation_year, creation_month
+        GROUP BY r."language", topic, creation_date, creation_year, creation_month
         ORDER BY n_repos DESC;
         """
         self.db.execute(q)

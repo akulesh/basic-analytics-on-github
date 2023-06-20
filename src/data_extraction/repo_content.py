@@ -9,10 +9,13 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.utils import make_safe_request, get_headers, logger
+from src.utils.api import make_safe_request, get_headers
+from src.utils.logger import logger
 
 
 class RepoContentExtractor:
+    """Extraction of repository content"""
+
     def __init__(
         self,
         api_token: str = None,

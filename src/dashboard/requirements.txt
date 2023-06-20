@@ -1,8 +1,6 @@
-black
-ipykernel
-isort
 pandas
-plotlypyarrow
-pyspark
+plotly
+psycopg2-binary
 streamlit
+sqlalchemy
 wordcloud

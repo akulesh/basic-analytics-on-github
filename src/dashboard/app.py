@@ -1,516 +1,406 @@
-# from datetime import datetime
+"""
+TODO: owner report
+TODO: filtering by last commit date
+TODO: check caching
+"""
 
-import os
+import argparse
 
-import plotly.express as px
 import streamlit as st
-import pandas as pd
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
-from src.utils import get_spark_session
-
-
-OUTPUT_DIR = (
-    "/Users/a_kulesh/Workspace/education/pet-projects/basic-analytics-on-github/data/processed"
+from src.utils.db_handler import DBHandler
+from src.dashboard.analytics import DataAnalytics
+from src.dashboard.components import (
+    add_date_picker,
+    add_multiselect,
+    plot_bar_chart,
+    plot_pie_chart,
+    plot_corr_matrix_heatmap,
+    plot_wordcloud,
 )
+from src.utils.api import logger
 
 
-def reduce_category_column(df, column, top_n=10, value="__OTHER__"):
-    values = df[column].value_counts()[:top_n].index
-    df = df.copy()
-    df.loc[~df[column].isin(values), column] = value
-
-    return df
+@st.cache_resource
+def create_data_session(db_username=None, db_password=None, **kwargs):
+    db = DBHandler(db_schema="github", db_username=db_username, db_password=db_password, **kwargs)
+    return DataAnalytics(db)
 
 
-@st.cache_data
-def load_data():
-    spark = get_spark_session()
-    repos = spark.read.parquet(os.path.join(OUTPUT_DIR, "repos")).toPandas()
-    repos = repos.drop_duplicates()
-    topics = spark.read.parquet(os.path.join(OUTPUT_DIR, "topics")).toPandas()
+class Dashboard:
+    """Streamlit-based dashboard with GitHub analytics"""
 
-    return repos, topics
+    def __init__(self, db_username=None, db_password=None, **kwargs):
+        self.da = create_data_session(db_username=db_username, db_password=db_password, **kwargs)
 
+    @property
+    def filters_info(self):
+        return self.da.get_filters_info()
 
-# @st.cache_data
-def get_base_metrics(repos, topics):
-    config = {
-        "id": {"f": "nunique", "format": int},
-        "owner": {"f": "nunique", "format": int},
-        "language": {"f": "nunique", "format": int},
-        "created_at": {"f": ["min", "max"], "format": pd.Timestamp},
-        "pushed_at": {"f": ["min", "max"], "format": pd.Timestamp},
-        "stargazers_count": {"f": "mean", "format": lambda x: round(float(x), 1)},
-        "watchers_count": {"f": "mean", "format": lambda x: round(float(x), 1)},
-        "forks_count": {"f": "mean", "format": lambda x: round(float(x), 1)},
-        "open_issues_count": {"f": "mean", "format": lambda x: round(float(x), 1)},
-    }
+    @staticmethod
+    def add_kpi_block(kpi_report):
+        cols = st.columns(4)
+        cols[0].metric("Number of Repositories", int(kpi_report["n_repos"]))
+        cols[1].metric("Number of Owners", int(kpi_report["n_owners"]))
+        cols[2].metric("Number of Languages", int(kpi_report["n_languages"]))
+        cols[3].metric("Number of Topics", int(kpi_report["n_topics"]))
 
-    f_mapping = {col: val["f"] for col, val in config.items()}
-    repos_stats = repos.agg(f_mapping).fillna("NA").to_dict()
+        cols[0].metric("Avg. Number of Stars", round(kpi_report["stars"], 1))
+        cols[1].metric("Avg. Number of Watchers", "--")
+        cols[2].metric("Avg. Number of Forks", round(kpi_report["forks"], 1))
+        cols[3].metric("Avg. Number of Open Issues", round(kpi_report["open_issues"], 1))
 
-    metrics = {}
-    for column, stats in repos_stats.items():
-        filtered_stats = {key: value for key, value in stats.items() if value != "NA"}
-        for prefix, value in filtered_stats.items():
-            metric_name = f"{prefix}_{column}"
-            value = config[column]["format"](value)
-            metrics[metric_name] = value
-
-    metrics["nunique_topics"] = topics["topics"].nunique()
-
-    return metrics
-
-
-# @st.cache_data
-def get_license_data(repos, top_n=10):
-    license_df = repos[repos["has_license"]].groupby("license").agg({"id": "nunique"})
-    license_df.columns = ["n_repos"]
-    license_df = license_df.reset_index()
-
-    all_lang_df = license_df.groupby("license").sum().reset_index()
-    license_list = all_lang_df.sort_values("n_repos", ascending=False)[:top_n]["license"].to_numpy()
-    license_df.loc[~license_df["license"].isin(license_list), "license"] = "Other"
-
-    return license_df
-
-
-def add_date_picker(repos):
-    min_date, max_date = get_date_range(repos)
-    st.sidebar.write("Repository creation date range")
-
-    def clear():
-        st.session_state.start_date = min_date
-        st.session_state.end_date = max_date
-
-    # Initialize the date range in session state
-    if ("start_date" not in st.session_state) or ("end_date" not in st.session_state):
-        clear()
-
-    cols = st.sidebar.columns(2)
-    cols[0].date_input(
-        label="Select start date",
-        value=min_date,
-        min_value=min_date,
-        max_value=max_date,
-        key="start_date",
-    )
-    cols[1].date_input(
-        label="Select end date",
-        value=max_date,
-        min_value=min_date,
-        max_value=max_date,
-        key="end_date",
-    )
-
-    # Add a reset button
-    st.sidebar.button("Reset", on_click=clear)
-
-    return pd.Timestamp(st.session_state.start_date), pd.Timestamp(st.session_state.end_date)
-
-
-def add_kpi_block(repos, topics):
-    base_metrics = get_base_metrics(repos, topics)
-
-    cols = st.columns(4)
-    cols[0].metric("Number of Repositories", base_metrics["nunique_id"])
-    cols[1].metric("Number of Owners", base_metrics["nunique_repo_owner"])
-    cols[2].metric("Number of Languages", base_metrics["nunique_language"])
-    cols[3].metric("Number of Topics", base_metrics["nunique_topics"])
-
-    cols[0].metric("Avg. Number of Stars", base_metrics["mean_stargazers_count"])
-    cols[1].metric("Avg. Number of Watchers", "--")
-    cols[2].metric("Avg. Number of Forks", base_metrics["mean_forks_count"])
-    cols[3].metric("Avg. Number of Open Issues", base_metrics["mean_open_issues_count"])
-
-
-def add_multiselect(
-    f,
-    options: list,
-    entity: str = "topic",
-    default=None,
-    add_reset_button: bool = False,
-    reset_button_name="Reset",
-):
-    values = (
-        f.multiselect(
-            f"Select the {entity.capitalize()}",
-            options,
-            default=default,
-            key=f"{entity}_multiselect",
+    @staticmethod
+    def plot_has_license(data):
+        df = DataAnalytics.get_has_property_report(
+            data, has_property_col="n_repos_with_license", label="has_license"
         )
-        or options
-    )
-
-    def clear_multi():
-        st.session_state[f"{entity}_multiselect"] = default or []
-
-    if add_reset_button:
-        f.button(reset_button_name, on_click=clear_multi, key=f"{entity}_reset")
-
-    return values
-
-
-def create_has_description_chart(repos):
-    df = repos["has_description"].value_counts().reset_index().replace({False: "No", True: "Yes"})
-    df.columns = ["Has description", "Number of Repositories"]
-    fig = px.pie(
-        df,
-        values="Number of Repositories",
-        names="Has description",
-        color="Has description",
-        title="Does a repo have description?",
-        color_discrete_map={"Yes": "green", "No": "lightblue"},
-        hole=0.5,
-    )
-    fig.update_traces(textposition="inside", textinfo="percent+label", showlegend=False)
-
-    return fig
-
-
-def add_basic_report(repos):
-    cols = st.columns(2)
-
-    with cols[0]:
-        # Number of repositories grouped by the year of creation
-        df = repos.groupby("created_at_year")["id"].nunique().reset_index()
-        df.columns = ["Date created", "Number of repositories"]
-        fig = px.bar(
+        plot_pie_chart(
             df,
-            x="Date created",
-            y="Number of repositories",
-            text="Number of repositories",
-            title="Repository creation date",
-        )
-        fig.update_traces(marker_color="steelblue")
-        fig.update_xaxes(tickmode="array", tickvals=df["Date created"])
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Languages
-        df = repos["language_display_name"].value_counts().reset_index()
-        df.columns = ["Language", "Number of Repositories"]
-        fig = px.pie(
-            df,
-            values="Number of Repositories",
-            names="Language",
-            color="Language",
-            title="Repository primary language",
-        )
-        fig.update_traces(textposition="inside", textinfo="percent+label", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with cols[1]:
-        # Number of repositories grouped by the year of the last push
-        df = repos.groupby("pushed_at_year")["id"].nunique().reset_index()
-        df.columns = ["Date updated", "Number of repositories"]
-        fig = px.bar(
-            df,
-            x="Date updated",
-            y="Number of repositories",
-            text="Number of repositories",
-            title="Repository last update date",
-        )
-        fig.update_traces(marker_color="royalblue")
-        fig.update_xaxes(tickmode="array", tickvals=df["Date updated"])
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Heatmap
-        fig = create_corr_matrix(repos)
-        st.plotly_chart(fig, use_container_width=True)
-
-
-def add_license_report(repos):
-    cols = st.columns(2)
-
-    with cols[0]:
-        df = repos["has_license"].value_counts().reset_index().replace({False: "No", True: "Yes"})
-        df.columns = ["Has License", "Number of Repositories"]
-        fig = px.pie(
-            df,
-            values="Number of Repositories",
-            names="Has License",
-            color="Has License",
+            group="has_license",
+            metric="n_repos",
+            hole=0.5,
+            color_discrete_map={"Yes": "green", "No": "lightblue"},
             title="Does a repo have a license?",
-            color_discrete_map={"Yes": "green", "No": "lightblue"},
+        )
+
+    @staticmethod
+    def plot_repos_by_license(data, top_n: int = 5):
+        df = DataAnalytics.get_categorical_data(
+            data, group="license", metric="n_repos", top_n=top_n
+        )
+        plot_pie_chart(
+            df,
+            group="license",
+            metric="n_repos",
+            showlegend=True,
+            textinfo="percent",
+            title=f"Top-{top_n} Most Common Licenses",
+            labels={"license": "License", "n_repos": "Number of Repositories"},
+        )
+
+    @staticmethod
+    def plot_repos_by_creation_year(data):
+        # Number of repositories grouped by the year of creation
+        df = data.groupby("creation_year").agg({"n_repos": sum}).reset_index()
+        plot_bar_chart(
+            df,
+            group="creation_year",
+            metric="n_repos",
+            title="Repository creation date",
+            labels={"creation_year": "Date created", "n_repos": "Number of repositories"},
+        )
+
+    @staticmethod
+    def plot_repos_by_last_commit_year(data):
+        # Number of repositories grouped by the year of the last push
+        df = data.groupby("last_commit_year").agg({"n_repos": sum}).reset_index()
+        plot_bar_chart(
+            df,
+            group="last_commit_year",
+            metric="n_repos",
+            title="Repository last commit date",
+            labels={
+                "last_commit_year": "Last commit date",
+                "n_repos": "Number of repositories",
+            },
+            marker_color="royalblue",
+        )
+
+    @staticmethod
+    def plot_repos_by_language(data):
+        # Language
+        df = data.groupby("language").agg({"n_repos": sum}).reset_index()
+        plot_pie_chart(df, group="language", metric="n_repos", title="Repository primary language")
+
+    @staticmethod
+    def plot_repos_by_branch(data, top_n=5):
+        # Default branch
+        df = DataAnalytics.get_categorical_data(
+            data, group="default_branch", metric="n_repos", top_n=top_n
+        )
+        plot_pie_chart(
+            df,
+            group="default_branch",
+            metric="n_repos",
+            textinfo="percent+label",
+            showlegend=True,
+            title="Repository default branch",
+        )
+
+    @staticmethod
+    def plot_is_archived(data):
+        df = DataAnalytics.get_has_property_report(
+            data, has_property_col="n_archived_repos", label="is_archived"
+        )
+        plot_pie_chart(
+            df,
+            group="is_archived",
+            metric="n_repos",
             hole=0.5,
-        )
-        fig.update_traces(textposition="inside", textinfo="percent+label", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with cols[1]:
-        df = get_license_data(repos)
-        df.columns = ["License", "Number of Repositories"]
-        cols[1].write(
-            px.pie(
-                df,
-                names="License",
-                values="Number of Repositories",
-                title="The Most Popular Licenses",
-            )
-        )
-
-
-def beautify_topics(topics):
-    return " ".join(f'<span class="topic">{topic}</span>' for topic in topics)
-
-
-def make_clickable(row):
-    return f'<a target="_blank" href="{row["html_url"]}">{row["full_name"]}</a>'
-
-
-def add_repos_report(
-    repos: pd.DataFrame,
-    topics: pd.DataFrame,
-    topics_stats: pd.DataFrame,
-    min_repos_per_topic: int = 10,
-):
-    st.header("Repositories Exploration")
-    top_menu = st.columns([1.5, 1, 1, 1, 1])
-    with top_menu[0]:
-        topics_list = list(
-            topics_stats[topics_stats["id"] >= min_repos_per_topic].sort_values(
-                by="id", ascending=False
-            )["topics"]
-        )
-        topic_filter = add_multiselect(top_menu[0], topics_list, entity="topic")
-        repo_ids = set(topics[topics["topics"].isin(topic_filter)]["id"])
-        topics = topics[(topics["id"].isin(repo_ids)) & (topics["topics"].isin(set(topics_list)))]
-        topics = topics[["id", "topics"]].groupby("id")["topics"].apply(list).reset_index()
-        repos = repos.merge(topics, how="inner", on="id")
-
-    with top_menu[1]:
-        sort_field = st.selectbox(
-            "Sort By",
-            options=[
-                "stargazers_count",
-                "forks_count",
-                "open_issues_count",
-                "created_at",
-                "pushed_at",
-            ],
-        )
-
-    with top_menu[-2]:
-        batch_size = st.selectbox("Items per Page", options=[5, 10, 25])
-
-    with top_menu[-1]:
-        total_pages = int(len(repos) / batch_size) if int(len(repos) / batch_size) > 0 else 1
-        current_page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
-
-    top_repos = repos.sort_values(by=sort_field, ascending=False)
-    top_repos["topics"] = top_repos["topics"].apply(beautify_topics)
-    top_repos = top_repos[(current_page - 1) * batch_size : current_page * batch_size]
-    top_repos["repository"] = top_repos.apply(make_clickable, axis=1)
-
-    # Define the CSS style for the topics
-    css_style = """
-        .topic {
-            background-color: lightgrey;
-            border-radius: 10px;
-            padding: 2px 6px;
-        }
-    """
-    columns = {
-        "repository": "Repository",
-        "language_display_name": "Language",
-        "topics": "Topic",
-        "description": "Description",
-        "stargazers_count": "Stars",
-        "forks_count": "Forks",
-        "open_issues_count": "Open Issues",
-        "created_at": "Created",
-        "pushed_at": "Updated",
-    }
-
-    top_repos = top_repos.rename(columns=columns)[columns.values()]
-    top_repos = top_repos.to_html(escape=False, index=False)
-    top_repos = f"<style>{css_style}</style>\n{top_repos}"
-
-    st.write(top_repos, unsafe_allow_html=True)
-
-    bottom_menu = st.columns(7)
-    with bottom_menu[-1]:
-        st.markdown(f"Page № **{current_page}** of **{total_pages}** ")
-
-
-def topics_coverage(stats, threshold=10):
-    output = stats[stats.index < threshold].sort_index()
-    output = output.to_dict()
-    output[f"{threshold}+"] = stats[stats.index >= threshold].sum()
-    output = pd.DataFrame(output.items(), columns=["Number of Repositories", "Number of Topics"])
-    output = output.astype(str)
-
-    return output
-
-
-def add_topics_report(topics, topics_stats, repos, threshold=10):
-    has_topic = (
-        (topics["topics"] == "__NA__")
-        .value_counts()
-        .reset_index()
-        .replace({False: "No", True: "Yes"})
-        .rename(columns={"index": "has_topic", "topics": "num_repos"})
-    )
-
-    # st.header("Repository Topics")
-    cols = st.columns(2)
-
-    with cols[0]:
-        fig = create_has_description_chart(repos)
-        st.plotly_chart(fig, use_container_width=True)
-
-        fig = px.pie(
-            has_topic,
-            values="num_repos",
-            names="has_topic",
-            hole=0.5,
-            color="has_topic",
             color_discrete_map={"Yes": "green", "No": "lightblue"},
-            title="Does a repos have a topic?",
+            title="Is a repo archived?",
         )
-        fig.update_traces(textposition="inside", textinfo="percent+label", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
 
-    with cols[1]:
-        fig = create_wordcloud(topics_stats)
-        st.pyplot(fig, use_container_width=True)
+    @staticmethod
+    def plot_wiki(data):
+        df = DataAnalytics.get_has_property_report(
+            data, has_property_col="n_repos_with_wiki", label="has_wiki"
+        )
+        plot_pie_chart(
+            df,
+            group="has_wiki",
+            metric="n_repos",
+            hole=0.5,
+            color_discrete_map={"Yes": "green", "No": "lightblue"},
+            title="Does a repo have wiki?",
+        )
 
-        counts = topics_stats["id"].value_counts()
-        coverage_df = topics_coverage(counts, threshold=threshold)
-        fig = px.bar(
-            coverage_df,
-            x="Number of Repositories",
-            y="Number of Topics",
-            text="Number of Topics",
+    @staticmethod
+    def plot_has_topic(data):
+        df = DataAnalytics.get_has_property_report(
+            data, has_property_col="n_repos_with_topic", label="has_topic"
+        )
+        plot_pie_chart(
+            df,
+            group="has_topic",
+            metric="n_repos",
+            hole=0.5,
+            color_discrete_map={"Yes": "green", "No": "lightblue"},
+            title="Does a repo have a topic?",
+        )
+
+    @staticmethod
+    def plot_topics_freq(data, threshold=10):
+        df = DataAnalytics.get_topic_report(data, threshold=threshold)
+        plot_bar_chart(
+            df,
+            group="freq",
+            metric="count",
             title="How many times a topic is mentioned?",
+            labels={"freq": "Topic frequency", "count": "Number of repositories"},
         )
 
-        fig.update_xaxes(type="category", tickvals=coverage_df["Number of Repositories"])
-        st.plotly_chart(fig, use_container_width=True)
+    @staticmethod
+    def plot_topic_cloud(data, top_n=100):
+        data = data.groupby("topic")["n_repos"].sum().sort_values(ascending=False)[:top_n].to_dict()
+        data.pop("__NA__", None)
+        plot_wordcloud(data, title="The most popular topics")
 
+    @staticmethod
+    def get_topics(data, threshold=10):
+        stats = data.groupby("topic")["n_repos"].sum().sort_values(ascending=False)
+        stats = stats[stats >= threshold].to_dict()
+        return list(stats.keys())
 
-def add_owners_report(repos):
-    st.header("Owners Exploration")
-    data = (
-        repos.groupby(["repo_owner", "language_display_name"])
-        .agg({"stargazers_count": "sum", "id": "nunique"})
-        .reset_index()
-    )
-    top_owners = data.groupby("repo_owner")["stargazers_count"].sum().sort_values()[-10:]
-    data = data[data["repo_owner"].isin(top_owners.index)].sort_values(by="stargazers_count")
-    fig = px.bar(
-        data, y="repo_owner", x="stargazers_count", color="language_display_name", orientation="h"
-    )
-    fig.update_yaxes(tickmode="array", tickvals=data["repo_owner"])
-    st.plotly_chart(fig)
+    @staticmethod
+    def get_licenses(data):
+        stats = data.groupby("license")["n_repos"].sum().sort_values(ascending=False)
+        return list(stats.keys())
 
+    def plot_repo_table(self, start_date, end_date, **kwargs):
+        data = self.da.get_repo_report(start_date, end_date, **kwargs)
 
-# @st.cache_data
-def get_date_range(repos):
-    min_date = pd.Timestamp(repos["created_at"].min())
-    max_date = pd.Timestamp(repos["created_at"].max())
+        st.dataframe(
+            data,
+            column_config={
+                "name": st.column_config.TextColumn("Repository Name"),
+                "language": st.column_config.TextColumn("Primary Language"),
+                "stars": st.column_config.NumberColumn("Stars", format="%d ⭐"),
+                "forks": st.column_config.NumberColumn("Forks", format="%d 🍴"),
+                "open_issues": st.column_config.NumberColumn("Open Issues", format="%d ❓"),
+                "archived": st.column_config.CheckboxColumn("Archived"),
+                "has_wiki": st.column_config.CheckboxColumn("Has Wiki"),
+                "topics": st.column_config.ListColumn("Topics"),
+                "description": st.column_config.TextColumn("Repository Description"),
+                "url": st.column_config.LinkColumn("Link"),
+                "license": st.column_config.TextColumn("License"),
+                "owner": st.column_config.TextColumn("Owner"),
+                "days_since_creation": st.column_config.NumberColumn("Days Since Creation"),
+                "days_since_last_commit": st.column_config.NumberColumn("Days Since Last Commit"),
+                "creation_date": st.column_config.DateColumn("Creation Date", format="YYYY-MM-DD"),
+                "last_commit_date": st.column_config.DateColumn(
+                    "Last Commit Date", format="YYYY-MM-DD"
+                ),
+            },
+        )
+        n_records = data.shape[0]
+        st.write(f"Number of records: {n_records}")
 
-    return min_date, max_date
+    def add_repo_report(
+        self,
+        start_date: str,
+        end_date: str,
+        topics: list = None,
+        licenses: list = None,
+        languages: list = None,
+        limit: int = None,
+    ):
+        st.header("Repository Exploration")
+        menu = st.columns([1, 1, 1, 1, 1, 1])
 
+        with menu[0]:
+            exclude_without_topic = st.checkbox("Exclude repos without topics")
 
-# @st.cache_data
-def filter_repos_by_date(repos, min_created_at, max_created_at):
-    min_date, max_date = get_date_range(repos)
-    if min_created_at and min_created_at > min_date:
-        repos = repos[repos["created_at"] >= min_created_at]
+        with menu[1]:
+            exclude_without_license = st.checkbox("Exclude repos without license")
 
-    if max_created_at and max_created_at < max_date:
-        repos = repos[repos["created_at"] <= max_created_at]
+        with menu[2]:
+            exclude_archived = st.checkbox("Exclude archived repos")
 
-    return repos
+        with menu[3]:
+            exclude_without_wiki = st.checkbox("Exclude repos without wiki")
 
+        menu = st.columns([2, 2, 1, 1, 1, 1])
 
-# @st.cache_data
-def filter_data_by_language(repos, topics, lang_filter):
-    repos = repos[repos["language_display_name"].isin(lang_filter)]
-    topics = topics[topics["language_display_name"].isin(lang_filter)]
+        with menu[0]:
+            topic_filter = add_multiselect(
+                menu[0], topics, entity="topic", exclude_empty=exclude_without_topic
+            )
 
-    return repos, topics
+        with menu[1]:
+            license_filter = add_multiselect(
+                menu[1], licenses, entity="license", exclude_empty=exclude_without_license
+            )
 
+        with menu[4]:
+            sort_field = st.selectbox(
+                "Order By",
+                options=[
+                    "stars",
+                    "forks",
+                    "open_issues",
+                    "days_since_created",
+                    "days_last_commit",
+                ],
+            )
 
-def create_corr_matrix(repos):
-    columns = [
-        "stargazers_count",
-        "forks_count",
-        "open_issues_count",
-        "size",
-        "days_since_date_created",
-        # "days_between_creation_and_latest_push",
-    ]
-    df = repos[columns].corr()
-    annotation = df.applymap(lambda x: f"{round(x*100)}%")
-    fig = px.imshow(
-        df, color_continuous_scale="mint", title="How different columns are correlated?"
-    )
-    fig.update_traces(text=annotation, texttemplate="%{text}")
-    fig.update_coloraxes(showscale=False)
+        with menu[5]:
+            limit = st.number_input("Limit", min_value=1, max_value=None, value=100, step=50)
 
-    return fig
+        self.plot_repo_table(
+            start_date,
+            end_date,
+            languages=languages,
+            topics=topic_filter,
+            licenses=license_filter,
+            sort_by=sort_field,
+            exclude_archived=exclude_archived,
+            exclude_without_wiki=exclude_without_wiki,
+            exclude_without_topic=exclude_without_topic,
+            exclude_without_license=exclude_without_license,
+            limit=limit,
+        )
 
+    def add_main_block(self, repos_df, topics_df):
+        # sourcery skip: extract-method
+        cols = st.columns(2)
+        with cols[0]:
+            self.plot_repos_by_creation_year(repos_df)
+            self.plot_repos_by_language(repos_df)
+            self.plot_has_license(repos_df)
+            self.plot_is_archived(repos_df)
+            self.plot_repos_by_branch(repos_df)
+            self.plot_topic_cloud(topics_df)
 
-def create_wordcloud(topics_stats):
-    data = topics_stats.set_index("topics")["id"].to_dict()
-    del data["__NA__"]
+        with cols[1]:
+            self.plot_repos_by_last_commit_year(repos_df)
+            plot_corr_matrix_heatmap(
+                repos_df,
+                columns=[
+                    "stars",
+                    "forks",
+                    "open_issues",
+                    "size",
+                    "days_since_creation",
+                    "days_since_last_commit",
+                ],
+                title="How different columns are correlated?",
+            )
+            self.plot_repos_by_license(repos_df, top_n=5)
+            self.plot_wiki(repos_df)
+            self.plot_has_topic(repos_df)
+            self.plot_topics_freq(topics_df, threshold=10)
 
-    wordcloud = WordCloud(
-        colormap="gnuplot", width=680, height=320, background_color="white", random_state=42
-    ).generate_from_frequencies(data, max_font_size=None)
+    def build(self):
+        st.title("Github Analytics Dashboard")
+        st.info(
+            body="""
+            #### About this app
+            Put some information about the app, their limitations, data collection process, etc.
+            """,
+            icon="ℹ️",
+        )
 
-    fig, ax = plt.subplots()
-    ax.imshow(wordcloud, interpolation="bilinear")
-    ax.axis("off")
+        min_year, max_year = int(self.filters_info["start_year"].min()), int(
+            self.filters_info["end_year"].max()
+        )
+        start_date, end_date = add_date_picker(min_year, max_year)
 
-    return fig
+        language_list = list(self.filters_info["language"])
+        lang_filter = add_multiselect(
+            f=st.sidebar,
+            options=language_list,
+            entity="language",
+            default=language_list,
+            add_reset_button=True,
+            reset_button_name="Select All",
+        )
+
+        kpi_report = self.da.get_kpi_report(start_date, end_date, languages=lang_filter)
+        self.add_kpi_block(kpi_report)
+
+        repo_analytics = self.da.get_analytics_data(
+            "repo_analytics", start_date, end_date, languages=lang_filter
+        )
+        topic_analytics = self.da.get_analytics_data(
+            "topic_analytics", start_date, end_date, languages=lang_filter
+        )
+        self.add_main_block(repo_analytics, topic_analytics)
+        topics = self.get_topics(topic_analytics)
+        licenses = self.get_licenses(repo_analytics)
+        self.add_repo_report(start_date, end_date, topics=topics, licenses=licenses, limit=100)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db_username", default=None)
+    parser.add_argument("--db_password", default=None)
+    parser.add_argument("--db_host", default="0.0.0.0")
+    parser.add_argument("--db_port", type=int, default=5432)
+    parser.add_argument("--db_name", default="postgres")
+
+    args = parser.parse_args()
+    logger.info(f"Args: {args}")
+
     st.set_page_config(page_title="Github Analytics Dashboard", page_icon="🖥️", layout="wide")
-    st.title("Github Analytics Dashboard")
-    st.info(
-        body="""
-        #### About this app
-        Put some information about limitations and data collection process
-        """,
-        icon="ℹ️",
+
+    dashboard = Dashboard(
+        db_username=args.db_username,
+        db_password=args.db_password,
+        db_host=args.db_host,
+        db_port=args.db_port,
+        db_name=args.db_name,
     )
+    dashboard.build()
 
-    repos, topics = load_data()
+    # add_owners_report(repos)
 
-    min_created_at, max_created_at = add_date_picker(repos)
-    repos = filter_repos_by_date(repos, min_created_at, max_created_at)
 
-    language_list = sorted(repos["language_display_name"].unique())
-    lang_filter = add_multiselect(
-        f=st.sidebar,
-        options=language_list,
-        entity="language",
-        default=language_list,
-        add_reset_button=True,
-        reset_button_name="Select All",
-    )
-
-    if lang_filter:
-        repos, topics = filter_data_by_language(repos, topics, lang_filter)
-
-    add_kpi_block(repos, topics)
-
-    add_basic_report(repos)
-
-    add_license_report(repos)
-
-    topics_stats = topics.groupby(["topics"])["id"].nunique().reset_index()
-    add_topics_report(topics, topics_stats, repos)
-
-    add_repos_report(repos, topics, topics_stats)
-
-    add_owners_report(repos)
+# def add_owners_report(repos):
+#     st.header("Owners Exploration")
+#     data = (
+#         repos.groupby(["repo_owner", "language_display_name"])
+#         .agg({"stargazers_count": "sum", "id": "nunique"})
+#         .reset_index()
+#     )
+#     top_owners = data.groupby("repo_owner")["stargazers_count"].sum().sort_values()[-10:]
+#     data = data[data["repo_owner"].isin(top_owners.index)].sort_values(by="stargazers_count")
+#     fig = px.bar(
+#         data, y="repo_owner", x="stargazers_count", color="language_display_name", orientation="h"
+#     )
+#     fig.update_yaxes(tickmode="array", tickvals=data["repo_owner"])
+#     st.plotly_chart(fig)
 
 
 if __name__ == "__main__":

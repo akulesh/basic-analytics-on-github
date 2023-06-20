@@ -17,15 +17,15 @@ class DBHandler:
 
     def __init__(
         self,
-        username: str = None,
-        password: str = None,
-        host: str = "0.0.0.0",
-        port: int = 5432,
+        db_username: str = None,
+        db_password: str = None,
+        db_host: str = "0.0.0.0",
+        db_port: int = 5432,
         db_name: str = "postgres",
-        schema: str = "public",
+        db_schema: str = "public",
     ):
-        self.schema = schema
-        self._initialize_connection(username, password, host, port, db_name)
+        self.schema = db_schema
+        self._initialize_connection(db_username, db_password, db_host, db_port, db_name)
 
     def _initialize_connection(
         self, username: str, password: str, host: str, port: int, db_name: str

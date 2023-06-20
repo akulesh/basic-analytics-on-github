@@ -3,7 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgres:14.1-alpine
-    container_name: db
+    container_name: github-db
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
@@ -18,7 +18,7 @@ services:
     networks:
       - postgres
   pgadmin:
-    container_name: pgadmin
+    container_name: pg-admin
     image: dpage/pgadmin4:7.3
     restart: unless-stopped
     environment:
@@ -36,7 +36,24 @@ services:
           memory: 1G
     networks:
       - postgres
-
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./src/dashboard/Dockerfile
+    container_name: dashboard
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - POSTGRES_SCHEMA=github
+      - POSTGRES_HOST=github-db
+    ports:
+      - 8501:8501
+    networks:
+      - postgres
+    depends_on:
+      - db
 volumes:
   pg-data:
   pgadmin-data:

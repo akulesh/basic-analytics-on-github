@@ -23,3 +23,4 @@ PYTHONPATH=. streamlit run src/dashboard/app.py
 
 # References:
 - https://docs.streamlit.io/library/api-reference
+- https://docs.streamlit.io/library/api-reference/data/st.dataframe

@@ -7,9 +7,10 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.data_processing.db_handler import DBHandler
+from src.utils.db_handler import DBHandler
 from src.data_processing.aggregator import DataAggregator
-from src.utils import logger, get_languages
+from src.utils.logger import logger
+from src.utils.common import get_languages
 
 
 class DataTransformer:
@@ -49,7 +50,6 @@ class DataTransformer:
         )
         data["has_license"] = (data["license"] != "__NA__").astype(int)
         data["has_description"] = (~data["description"].isnull()).astype(int)
-        data["has_topic"] = (~data["topics"].isnull()).astype(int)
         data["has_wiki"] = data["has_wiki"].astype(int)
         data["archived"] = data["archived"].astype(int)
         data["description"] = data["description"].astype("str")
@@ -104,7 +104,6 @@ class DataTransformer:
             "archived",
             "has_license",
             "has_description",
-            "has_topic",
             "has_wiki",
             "default_branch",
             "license",
@@ -132,6 +131,7 @@ class DataTransformer:
             return value
 
         data.loc[:, "topics"] = data["topics"].apply(transform)
+        data["has_topic"] = (data["topics"] != "").astype(int)
 
         return data
 
@@ -193,12 +193,12 @@ def main():
     logger.info(f"Args: {args}")
 
     db = DBHandler(
-        schema="github",
-        username=args.db_username,
-        password=args.db_password,
-        host=args.db_host,
-        port=args.db_port,
+        db_username=args.db_username,
+        db_password=args.db_password,
+        db_host=args.db_host,
+        db_port=args.db_port,
         db_name=args.db_name,
+        db_schema="github",
     )
 
     run_transformation_flow(
