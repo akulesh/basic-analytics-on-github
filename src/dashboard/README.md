@@ -18,6 +18,8 @@ conda env remove --name=$EVN_NAME
 
 ## Run Dashboard
 ```
+source .env
+export POSTGRES_HOST=0.0.0.0
 PYTHONPATH=. streamlit run src/dashboard/app.py
 ```
 

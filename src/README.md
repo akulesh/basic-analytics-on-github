@@ -22,12 +22,22 @@ PREFECT_LOGGING_EXTRA_LOGGERS=my_logger prefect agent start -p 'default-agent-po
 
 ## Download repositories metadata
 ```
-PREFECT_LOGGING_EXTRA_LOGGERS=my_logger PYTHONPATH=. python src/data_extraction.py \
+PREFECT_LOGGING_EXTRA_LOGGERS=my_logger 
+
+PYTHONPATH=. python src/etl/extractors/repo_metadata.py \
     --start_date=2012-01-01\
     --end_date=2012-01-07\
-    --language="csharp"\
+    --languages="python"\
     --output_dir="/Users/a_kulesh/Workspace/education/pet-projects/basic-analytics-on-github/tmp/data/raw/repositories"\
-    --overwrite
+    --overwrite_existed_files
+
+PYTHONPATH=. python src/etl/flows.py \
+    --start_date=2020-01-01\
+    --end_date=2020-01-01\
+    --languages="python"\
+    --source_dir="/Users/a_kulesh/Workspace/education/pet-projects/basic-analytics-on-github/tmp/data/raw/repositories"\
+    --db_host="0.0.0.0"\
+    --skip_extraction
 ```
 
 ## Transform repositories metadata

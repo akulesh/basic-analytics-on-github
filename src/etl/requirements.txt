@@ -1,6 +1,7 @@
-
 pandas
 prefect
+requests
 psycopg2-binary
+pyarrow
 sqlalchemy
 tqdm

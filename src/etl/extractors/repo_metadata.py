@@ -1,7 +1,5 @@
 """
 Github API scrapping
-
-TODO: add upload date
 """
 
 import argparse
@@ -11,17 +9,17 @@ from glob import glob
 
 import pandas as pd
 from tqdm import tqdm
-from prefect import flow
 
-from src.utils.api import make_safe_request, get_headers
+from src.utils.api import make_safe_request, get_headers, get_languages, SUPPORTED_LANGUAGES
 from src.utils.logger import logger
-from src.data_extraction.utils import get_languages, SUPPORTED_LANGUAGES
 
 
 BASE_URL = "https://api.github.com/search/repositories"
 
 
 class RepoMetadataExtractor:
+    """Extracting repositories metadata from Github"""
+
     def __init__(
         self,
         output_dir: str = "./data",
@@ -60,9 +58,6 @@ class RepoMetadataExtractor:
 
         if min_stars_count:
             url = f"{url}+stars:>={min_stars_count}"
-
-        if isinstance(languages, str):
-            languages = [languages]
 
         if isinstance(languages, list):
             for lang in languages:
@@ -117,7 +112,7 @@ class RepoMetadataExtractor:
 
         return df
 
-    def extract_repos(self, created_at: str, languages: str | list, **kwargs):
+    def extract_repos(self, created_at: str, languages: list, **kwargs):
         try:
             url = self.get_url(created_at, languages=languages, page=1)
             response = make_safe_request(
@@ -159,35 +154,6 @@ class RepoMetadataExtractor:
             time.sleep(self.pagination_timeout)
 
 
-@flow(
-    name="repo-metadata-extraction",
-    flow_run_name="Github Repo Metadata Extraction Flow",
-    log_prints=True,
-)
-def extract_repo_metadata(
-    output_dir: str,
-    start_date: str = "2020-01-01",
-    end_date: str = None,
-    min_pushed_date: str = "2020-01-01",
-    languages: str | list = None,
-    overwrite_existed_files: bool = False,
-    min_stars_count: int = 1,
-    **kwargs,
-):
-    extractor = RepoMetadataExtractor(
-        output_dir=output_dir,
-        min_pushed_date=min_pushed_date,
-        **kwargs,
-    )
-    extractor.run(
-        start_date=start_date,
-        end_date=end_date,
-        languages=languages or SUPPORTED_LANGUAGES,
-        min_stars_count=min_stars_count,
-        overwrite=overwrite_existed_files,
-    )
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_date", default="2020-01-01")
@@ -203,16 +169,18 @@ def main():
     args = parser.parse_args()
     logger.info(f"Args: {args}")
 
-    extract_repo_metadata(
-        start_date=args.start_date,
-        end_date=args.end_date,
+    extractor = RepoMetadataExtractor(
         output_dir=args.output_dir,
-        languages=get_languages(args.languages),
-        min_stars_count=args.min_stars_count,
         min_pushed_date=args.min_pushed_date,
         pagination_timeout=args.pagination_timeout,
         api_token=args.api_token,
-        overwrite_existed_files=args.overwrite_existed_files,
+    )
+    extractor.run(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        languages=get_languages(args.languages),
+        min_stars_count=args.min_stars_count,
+        overwrite=args.overwrite_existed_files,
     )
 
 

@@ -8,37 +8,43 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 
-def add_date_picker(min_date_year, max_date_year):
-    st.sidebar.write("Repository creation date range")
+def add_date_picker(min_date_year, max_date_year, key_prefix="creation_date"):
+    st.sidebar.header(f"📆 Repository `{key_prefix}`")
 
     def clear():
-        st.session_state.start_year = min_date_year
-        st.session_state.end_year = max_date_year
-        st.session_state.start_month = 1
-        st.session_state.end_month = 12
+        st.session_state[f"{key_prefix}_start_year"] = min_date_year
+        st.session_state[f"{key_prefix}_end_year"] = max_date_year
+        st.session_state[f"{key_prefix}_start_month"] = 1
+        st.session_state[f"{key_prefix}_end_month"] = 12
 
     # Initialize the date range in session state
-    if ("start_year" not in st.session_state) or ("end_year" not in st.session_state):
+    if (f"{key_prefix}_start_year" not in st.session_state) or (
+        f"{key_prefix}_end_year" not in st.session_state
+    ):
         clear()
 
     cols = st.sidebar.columns(2)
     with cols[0]:
-        st.selectbox("Start Year", range(min_date_year, max_date_year + 1), key="start_year")
-        st.selectbox("End Year", range(min_date_year, max_date_year + 1), key="end_year")
+        st.selectbox(
+            "Start Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_start_year"
+        )
+        st.selectbox(
+            "End Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_end_year"
+        )
 
     with cols[1]:
-        st.selectbox("Start Month", range(1, 13), key="start_month")
-        st.selectbox("End Month", range(1, 13), key="end_month")
+        st.selectbox("Start Month", range(1, 13), key=f"{key_prefix}_start_month")
+        st.selectbox("End Month", range(1, 13), key=f"{key_prefix}_end_month")
 
     # Add a reset button
-    st.sidebar.button("Select All", on_click=clear)
+    st.sidebar.button("Select All", on_click=clear, key=f"{key_prefix}_date_reset")
 
     (start_year, start_month), (end_year, end_month) = (
-        int(st.session_state.start_year),
-        int(st.session_state.start_month),
+        int(st.session_state[f"{key_prefix}_start_year"]),
+        int(st.session_state[f"{key_prefix}_start_month"]),
     ), (
-        int(st.session_state.end_year),
-        int(st.session_state.end_month),
+        int(st.session_state[f"{key_prefix}_end_year"]),
+        int(st.session_state[f"{key_prefix}_end_month"]),
     )
 
     start_date = datetime(year=start_year, month=start_month, day=1)

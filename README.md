@@ -50,6 +50,15 @@ conda deactivate
 conda env remove --name=$EVN_NAME
 ```
 
+## Run ETL
+```
+PYTHONPATH=. python src/etl/main.py \
+    --skip_extraction
+```
+docker run --network=basic-analytics-on-github_prefect -it basic-analytics-on-github_etl bash
+prefect config set PREFECT_API_URL=http://server:4200/api
+PYTHONPATH=. python src/etl/deploy.py
+
 ## Run Dashboard
 ```
 PYTHONPATH=. streamlit run src/app.py
@@ -59,3 +68,10 @@ PYTHONPATH=. streamlit run src/app.py
 - https://docs.streamlit.io/library/api-reference
 - https://geshan.com.np/blog/2021/12/docker-postgres/
 - https://www.datacamp.com/tutorial/wordcloud-python
+- https://docs.docker.com/compose/
+- https://docs.docker.com/compose/startup-order/
+- https://docs.docker.com/compose/compose-file/05-services/#depends_on
+- https://docs.prefect.io/2.10.16/concepts/deployments/
+- https://github.com/flavienbwk/prefect-docker-compose/blob/main/client/app/weather.py
+- https://github.com/rpeden/prefect-docker-compose/blob/main/docker-compose.yml
+- https://docs.prefect.io/2.10.16/concepts/deployments/

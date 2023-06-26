@@ -1,6 +1,5 @@
 """
 TODO: owner report
-TODO: filtering by last commit date
 TODO: check caching
 """
 
@@ -18,7 +17,7 @@ from src.dashboard.components import (
     plot_corr_matrix_heatmap,
     plot_wordcloud,
 )
-from src.utils.api import logger
+from src.utils.db_handler import create_db_session
 
 
 @st.cache_resource
@@ -27,15 +26,17 @@ def create_data_session(db_username=None, db_password=None, **kwargs):
     return DataAnalytics(db)
 
 
+@st.cache_data
+def get_filters_info(_da: DataAnalytics):
+    return _da.get_filters_info()
+
+
 class Dashboard:
     """Streamlit-based dashboard with GitHub analytics"""
 
     def __init__(self, db_username=None, db_password=None, **kwargs):
         self.da = create_data_session(db_username=db_username, db_password=db_password, **kwargs)
-
-    @property
-    def filters_info(self):
-        return self.da.get_filters_info()
+        self.filters_info = get_filters_info(self.da)
 
     @staticmethod
     def add_kpi_block(kpi_report):
@@ -176,9 +177,9 @@ class Dashboard:
         plot_bar_chart(
             df,
             group="freq",
-            metric="count",
+            metric="n_repos",
             title="How many times a topic is mentioned?",
-            labels={"freq": "Topic frequency", "count": "Number of repositories"},
+            labels={"freq": "Topic frequency", "n_repos": "Number of repositories"},
         )
 
     @staticmethod
@@ -188,7 +189,7 @@ class Dashboard:
         plot_wordcloud(data, title="The most popular topics")
 
     @staticmethod
-    def get_topics(data, threshold=10):
+    def get_topics(data, threshold: int = 10):
         stats = data.groupby("topic")["n_repos"].sum().sort_values(ascending=False)
         stats = stats[stats >= threshold].to_dict()
         return list(stats.keys())
@@ -198,8 +199,12 @@ class Dashboard:
         stats = data.groupby("license")["n_repos"].sum().sort_values(ascending=False)
         return list(stats.keys())
 
-    def plot_repo_table(self, start_date, end_date, **kwargs):
-        data = self.da.get_repo_report(start_date, end_date, **kwargs)
+    def plot_repo_table(self, creation_date_range=None, last_commit_date_range=None, **kwargs):
+        data = self.da.get_repo_report(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            **kwargs,
+        )
 
         st.dataframe(
             data,
@@ -229,14 +234,14 @@ class Dashboard:
 
     def add_repo_report(
         self,
-        start_date: str,
-        end_date: str,
+        creation_date_range=None,
+        last_commit_date_range=None,
         topics: list = None,
         licenses: list = None,
         languages: list = None,
         limit: int = None,
     ):
-        st.header("Repository Exploration")
+        st.header("⛵ Repository Exploration")
         menu = st.columns([1, 1, 1, 1, 1, 1])
 
         with menu[0]:
@@ -253,14 +258,16 @@ class Dashboard:
 
         menu = st.columns([2, 2, 1, 1, 1, 1])
 
-        with menu[0]:
+        col = menu[0]
+        with col:
             topic_filter = add_multiselect(
-                menu[0], topics, entity="topic", exclude_empty=exclude_without_topic
+                col, topics, entity="topic", exclude_empty=exclude_without_topic
             )
 
-        with menu[1]:
+        col = menu[1]
+        with col:
             license_filter = add_multiselect(
-                menu[1], licenses, entity="license", exclude_empty=exclude_without_license
+                col, licenses, entity="license", exclude_empty=exclude_without_license
             )
 
         with menu[4]:
@@ -279,8 +286,8 @@ class Dashboard:
             limit = st.number_input("Limit", min_value=1, max_value=None, value=100, step=50)
 
         self.plot_repo_table(
-            start_date,
-            end_date,
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
             languages=languages,
             topics=topic_filter,
             licenses=license_filter,
@@ -323,20 +330,31 @@ class Dashboard:
             self.plot_topics_freq(topics_df, threshold=10)
 
     def build(self):
-        st.title("Github Analytics Dashboard")
+        st.title("📊 Github Analytics Dashboard")
         st.info(
             body="""
-            #### About this app
+            #### Note
             Put some information about the app, their limitations, data collection process, etc.
             """,
             icon="ℹ️",
         )
 
-        min_year, max_year = int(self.filters_info["start_year"].min()), int(
-            self.filters_info["end_year"].max()
-        )
-        start_date, end_date = add_date_picker(min_year, max_year)
+        if self.filters_info.empty:
+            return st.markdown("⛔ Data is not prepared! Please load the data into the DB.")
 
+        st.sidebar.title("")
+
+        min_year, max_year = int(self.filters_info["creation_start_year"].min()), int(
+            self.filters_info["creation_end_year"].max()
+        )
+        creation_date_range = add_date_picker(min_year, max_year)
+
+        min_year, max_year = int(self.filters_info["last_commit_start_year"].min()), int(
+            self.filters_info["last_commit_end_year"].max()
+        )
+        last_commit_date_range = add_date_picker(min_year, max_year, key_prefix="last_commit_date")
+
+        st.sidebar.header("🌐 Primary Language")
         language_list = list(self.filters_info["language"])
         lang_filter = add_multiselect(
             f=st.sidebar,
@@ -347,31 +365,45 @@ class Dashboard:
             reset_button_name="Select All",
         )
 
-        kpi_report = self.da.get_kpi_report(start_date, end_date, languages=lang_filter)
+        kpi_report = self.da.get_kpi_report(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=lang_filter,
+        )
         self.add_kpi_block(kpi_report)
 
         repo_analytics = self.da.get_analytics_data(
-            "repo_analytics", start_date, end_date, languages=lang_filter
+            "repo_analytics",
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=lang_filter,
         )
         topic_analytics = self.da.get_analytics_data(
-            "topic_analytics", start_date, end_date, languages=lang_filter
+            "topic_analytics",
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=lang_filter,
         )
         self.add_main_block(repo_analytics, topic_analytics)
         topics = self.get_topics(topic_analytics)
         licenses = self.get_licenses(repo_analytics)
-        self.add_repo_report(start_date, end_date, topics=topics, licenses=licenses, limit=100)
+        self.add_repo_report(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            topics=topics,
+            licenses=licenses,
+            limit=100,
+        )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db_username", default=None)
-    parser.add_argument("--db_password", default=None)
-    parser.add_argument("--db_host", default="0.0.0.0")
-    parser.add_argument("--db_port", type=int, default=5432)
-    parser.add_argument("--db_name", default="postgres")
-
+    parser.add_argument("--db_username")
+    parser.add_argument("--db_password")
+    parser.add_argument("--db_host")
+    parser.add_argument("--db_port", type=int)
+    parser.add_argument("--db_name")
     args = parser.parse_args()
-    logger.info(f"Args: {args}")
 
     st.set_page_config(page_title="Github Analytics Dashboard", page_icon="🖥️", layout="wide")
 

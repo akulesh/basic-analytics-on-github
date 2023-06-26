@@ -1,64 +1,120 @@
-version: '3.8'
+version: "3.9"
 
 services:
   db:
-    image: postgres:14.1-alpine
+    image: postgres:15.3-alpine
     container_name: github-db
-    restart: unless-stopped
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-      - POSTGRES_SCHEMA=github
-    ports:
-      - 5432:5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
     volumes:
-      - ./db/pg-data:/var/lib/postgresql/data
+      - ./volumes/pg-data:/var/lib/postgresql/data
       - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh
+    ports:
+      - "5432:5432"
     networks:
-      - postgres
+      - app
   pgadmin:
     container_name: pg-admin
     image: dpage/pgadmin4:7.3
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: pgadmin@gmial.com
-      PGADMIN_DEFAULT_PASSWORD: pgadmin
-      PGADMIN_CONFIG_SERVER_MODE: "False"
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      - PGADMIN_CONFIG_SERVER_MODE=False
     volumes:
-      - ./db/pgadmin-data:/var/lib/pgadmin
+      - ./volumes/pgadmin-data:/var/lib/pgadmin
     ports:
-      - 5050:80
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 1G
+      - "5050:80"
     networks:
-      - postgres
+      - app
+  server:
+    build:
+      context: .
+      dockerfile: ./src/prefect/Dockerfile
+    container_name: prefect-server
+    restart: always
+    healthcheck:
+      test: "curl -f localhost:4200/api/health"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    entrypoint: [ "prefect", "server", "start" ]
+    environment:
+      - PREFECT_ORION_API_HOST=0.0.0.0
+      - PREFECT_ORION_DATABASE_CONNECTION_URL=${PREFECT_DB_CONNECTION_URL}
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./volumes/prefect:/root/.prefect
+    networks:
+      - app
+      - prefect
+    depends_on:
+      db:
+        condition: service_healthy
+  etl:
+    build:
+      context: .
+      dockerfile: ./src/etl/Dockerfile
+    container_name: etl-pipeline
+    restart: always
+    environment:
+      - API_TOKEN=${API_TOKEN}
+      - PREFECT_RESULTS_PERSIST_BY_DEFAULT=true
+      - PREFECT_API_URL=http://server:4200/api
+      - PREFECT_WORK_POOL=${PREFECT_WORK_POOL:-github-agent-pool}
+      - PREFECT_WORK_QUEUE=${PREFECT_WORK_QUEUE:-default}
+      - PREFECT_LOGGING_EXTRA_LOGGERS=my_logger
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
+      - PYTHONPATH=/app
+    volumes:
+      - ./volumes/data/raw/repos:/app/volumes/data/raw/repos
+    command: "bash /app/src/etl/run.sh"
+    networks:
+      - app
+      - prefect
+    depends_on:
+      server:
+        condition: service_healthy
   dashboard:
     build:
       context: .
       dockerfile: ./src/dashboard/Dockerfile
-    container_name: dashboard
+    container_name: github-dashboard
     restart: always
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-      - POSTGRES_SCHEMA=github
-      - POSTGRES_HOST=github-db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
+      - API_TOKEN=${API_TOKEN}
     ports:
-      - 8501:8501
+      - "8501:8501"
     networks:
-      - postgres
+      - app
     depends_on:
-      - db
-volumes:
-  pg-data:
-  pgadmin-data:
-
+      db:
+        condition: service_healthy
 
 networks:
-  postgres:
+  app:
+    driver: bridge
+  prefect:
     driver: bridge

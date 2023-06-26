@@ -1,0 +1,15 @@
+FROM python:3.10-slim
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY src/etl/requirements.txt /app
+RUN pip install -r requirements.txt
+
+COPY src/etl /app/src/etl
+COPY src/utils /app/src/utils

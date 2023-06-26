@@ -10,9 +10,17 @@ class Logger:
         if Logger._instance is None:
             Logger._instance = logging.getLogger(name)
             formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-            handler = logging.FileHandler(filename)
-            handler.setFormatter(formatter)
-            Logger._instance.addHandler(handler)
+
+            # File handler
+            file_handler = logging.FileHandler(filename)
+            file_handler.setFormatter(formatter)
+            Logger._instance.addHandler(file_handler)
+
+            # Stream handler
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(formatter)
+            Logger._instance.addHandler(stream_handler)
+
             Logger._instance.setLevel(level)
 
     def __getattr__(self, attr):

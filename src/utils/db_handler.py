@@ -6,10 +6,29 @@ urllib.parse.quote_plus("kx@jj5/g")
 """
 
 import os
-from datetime import datetime
 
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+
+
+def create_db_session(
+    db_username: str = None,
+    db_password: str = None,
+    db_host: str = None,
+    db_port: int = None,
+    db_name: str = None,
+):
+    username = db_username or os.getenv("POSTGRES_USER")
+    password = db_password or os.getenv("POSTGRES_PASSWORD")
+    host = db_host or os.getenv("POSTGRES_HOST")
+    port = db_port or os.getenv("POSTGRES_PORT", db_port)
+    db_name = db_name or os.getenv("POSTGRES_DB", db_name)
+
+    if not username or not password:
+        raise ValueError("Database credentials not provided.")
+
+    conn_string = f"postgresql://{username}:{password}@{host}:{port}/{db_name}"
+    return create_engine(conn_string, pool_pre_ping=True)
 
 
 class DBHandler:
@@ -19,43 +38,34 @@ class DBHandler:
         self,
         db_username: str = None,
         db_password: str = None,
-        db_host: str = "0.0.0.0",
-        db_port: int = 5432,
-        db_name: str = "postgres",
-        db_schema: str = "public",
+        db_host: str = None,
+        db_port: int = None,
+        db_name: str = None,
+        db_schema: str = None,
     ):
-        self.schema = db_schema
-        self._initialize_connection(db_username, db_password, db_host, db_port, db_name)
-
-    def _initialize_connection(
-        self, username: str, password: str, host: str, port: int, db_name: str
-    ):
-        username = os.getenv("POSTGRES_USER", username)
-        password = os.getenv("POSTGRES_PASSWORD", password)
-        host = os.getenv("POSTGRES_HOST", host)
-        port = os.getenv("POSTGRES_PORT", port)
-        db_name = os.getenv("POSTGRES_DB", db_name)
-
-        if not username or not password:
-            raise ValueError("Database credentials not provided.")
-
-        conn_string = f"postgresql://{username}:{password}@{host}:{port}/{db_name}"
-        self.engine = create_engine(conn_string, pool_pre_ping=True)
+        self.schema = db_schema or os.getenv("POSTGRES_SCHEMA")
+        self.engine = create_db_session(
+            db_username=db_username,
+            db_password=db_password,
+            db_host=db_host,
+            db_port=db_port,
+            db_name=db_name,
+        )
 
     def execute(self, q: str):
-        with self.engine.connect() as connection:
+        q = text(q)
+        with self.engine.begin() as connection:
             return connection.execute(q)
 
     def drop_duplicates(self, table: str, key_columns: list):
         q = f"""
-        DELETE FROM
-            {self.schema}.{table} t1
-                USING {self.schema}.{table} t2
+        DELETE FROM {self.schema}.{table} t1
+            USING {self.schema}.{table} t2
         WHERE t1.updated_at < t2.updated_at
         """
 
         for col in key_columns:
-            q += f"\n\tAND t1.{col} = t2.{col}"
+            q += f"\tAND t1.{col} = t2.{col}"
 
         self.execute(q)
 
@@ -64,8 +74,6 @@ class DBHandler:
             f"SELECT * FROM {self.schema}.{table} LIMIT 0;", con=self.engine
         ).columns
 
-        data = data.copy()
-        data.loc[:, "updated_at"] = datetime.now()
         columns = [c for c in columns if c in data.columns]
         data[columns].to_sql(
             table, con=self.engine, if_exists="append", index=False, schema=self.schema

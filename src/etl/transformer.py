@@ -1,16 +1,16 @@
 import argparse
 from datetime import datetime
-from glob import glob
 import time
+import os
 
 import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
 from src.utils.db_handler import DBHandler
-from src.data_processing.aggregator import DataAggregator
+from src.etl.aggregator import DataAggregator
 from src.utils.logger import logger
-from src.utils.common import get_languages
+from src.utils.api import get_languages, SUPPORTED_LANGUAGES
 
 
 class DataTransformer:
@@ -140,24 +140,34 @@ class DataTransformer:
             df = func(data)
             self.db.update_table(df, table=table)
 
-    def run(self, input_dir: str, languages: list, limit=None):
+    @staticmethod
+    def get_languages_from_path(path: str):
+        values = [x.split("=")[-1] for x in os.listdir(path)]
+        return [x for x in values if x in SUPPORTED_LANGUAGES]
+
+    def run(self, input_dir: str, start_date: str, end_date: str = None, languages: list = None):
         mapping = {
             "repo": {"get_table": self.get_repo_table, "key_columns": ["id"]},
             "repo_topic": {"get_table": self.get_topic_table, "key_columns": ["repo_id", "topic"]},
             "owner": {"get_table": self.get_owner_table, "key_columns": ["url"]},
         }
+        _mapping = {table: val["get_table"] for table, val in mapping.items()}
 
+        end_date = end_date or start_date
+        dates = pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
+
+        languages = languages or self.get_languages_from_path(input_dir)
         for lang in languages:
             logger.info(f"🕐 Language: {lang}")
-            files = glob(f"{input_dir}/language={lang}/*.parquet")
 
-            if limit:
-                files = files[:limit]
-
-            _mapping = {table: val["get_table"] for table, val in mapping.items()}
-            for f in tqdm(files, total=len(files)):
-                data = self.process_file(f)
-                self.update_tables(data, _mapping)
+            for date in tqdm(dates, total=len(dates)):
+                filename = os.path.join(input_dir, f"language={lang}", f"{date}.parquet")
+                if os.path.exists(filename):
+                    data = self.process_file(filename)
+                    data.loc[:, "language"] = SUPPORTED_LANGUAGES.get(lang, lang)
+                    self.update_tables(data, _mapping)
+                else:
+                    logger.warning(f"File '{filename}' does not exists.")
 
         for table, val in mapping.items():
             logger.info(f"Cleaning table '{table}' from duplicates...")
@@ -166,9 +176,11 @@ class DataTransformer:
 
 
 @flow(flow_run_name="Github Data Transformation Flow", log_prints=True)
-def run_transformation_flow(db, input_dir: str, languages: list, limit=None):
+def run_transformation_flow(db, input_dir: str, start_date: str, end_date: str, languages: list):
     transformer = DataTransformer(db)
-    transformer.run(input_dir=input_dir, languages=languages, limit=limit)
+    transformer.run(
+        input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
+    )
 
     aggregator = DataAggregator(db)
     aggregator.run()

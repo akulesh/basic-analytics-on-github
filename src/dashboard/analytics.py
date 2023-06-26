@@ -20,12 +20,64 @@ class DataAnalytics:
 
         return values
 
+    def _get_conditions(
+        self,
+        creation_date_range=None,
+        last_commit_date_range=None,
+        languages=None,
+        licenses=None,
+        exclude_archived=None,
+        exclude_without_wiki=None,
+        exclude_without_license=None,
+    ):
+        conditions = []
+
+        if creation_date_range:
+            start_date, end_date = creation_date_range
+            conditions.extend(
+                (
+                    f"creation_date >= '{start_date}'",
+                    f"creation_date <= '{end_date}'",
+                )
+            )
+        if last_commit_date_range:
+            start_date, end_date = last_commit_date_range
+            conditions.extend(
+                (
+                    f"last_commit_date >= '{start_date}'",
+                    f"last_commit_date <= '{end_date}'",
+                )
+            )
+        if languages:
+            languages = self._fix_values(languages)
+            conditions.append(f'"language" IN {languages}')
+
+        if licenses:
+            licenses = self._fix_values(licenses)
+            conditions.append(f"license IN {licenses}")
+
+        if exclude_archived:
+            conditions.append("archived = 0")
+
+        if exclude_without_wiki:
+            conditions.append("has_wiki = 1")
+
+        if exclude_without_license:
+            conditions.append("license != '__NA__'")
+
+        if exclude_without_wiki:
+            conditions.append("r.has_wiki = 1")
+
+        return conditions
+
     def get_filters_info(self):
         query = f"""
         SELECT "language",
             SUM(n_repos) AS n_repos,
-            MIN(creation_year) AS start_year,
-            MAX(creation_year) AS end_year
+            MIN(creation_year) AS creation_start_year,
+            MAX(creation_year) AS creation_end_year,
+            MIN(last_commit_year) AS last_commit_start_year,
+            MAX(last_commit_year) AS last_commit_end_year
         FROM {self.schema}.repo_analytics
         GROUP BY "language"
         ORDER BY n_repos DESC;
@@ -33,30 +85,24 @@ class DataAnalytics:
 
         return self.db.read_sql(query)
 
-    def get_analytics_data(self, table, start_date, end_date, languages=None) -> dict:
-        condition = f"""
-        WHERE creation_date >= '{start_date}'
-            AND creation_date <= '{end_date}'
-        """
+    def get_analytics_data(
+        self, table, creation_date_range=None, last_commit_date_range=None, languages=None
+    ) -> dict:
+        conditions = self._get_conditions(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=languages,
+        )
 
-        if languages:
-            languages = self._fix_values(languages)
-            condition += f'AND "language" IN {languages}'
+        query = f"SELECT * FROM {self.schema}.{table}\n"
+        if conditions:
+            query += "\tWHERE " + "\n\t\tAND ".join(conditions)
 
-        query = f"SELECT * FROM {self.schema}.{table}"
-        query += condition
         return self.db.read_sql(query)
 
-    def get_kpi_report(self, start_date, end_date, languages=None) -> dict:
-        condition = f"""
-        WHERE creation_date >= '{start_date}'
-            AND creation_date <= '{end_date}'
-        """
-
-        if languages:
-            languages = self._fix_values(languages)
-            condition += f'AND "language" IN {languages}'
-
+    def get_kpi_report(
+        self, creation_date_range=None, last_commit_date_range=None, languages=None
+    ) -> dict:
         query = f"""
         SELECT SUM(n_repos) AS n_repos,
             SUM(n_owners) AS n_owners,
@@ -75,7 +121,15 @@ class DataAnalytics:
             CEIL(AVG(days_since_last_commit)) AS days_since_last_commit
         FROM {self.schema}.repo_analytics
         """
-        query += condition
+
+        conditions = self._get_conditions(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=languages,
+        )
+        if conditions:
+            query += "\tWHERE " + "\n\t\tAND ".join(conditions)
+
         data = self.db.read_sql(query).iloc[0]
         output = data.to_dict()
 
@@ -83,8 +137,9 @@ class DataAnalytics:
         SELECT COUNT(DISTINCT topic) AS n_topics
         FROM {self.schema}.topic_analytics
         """
+        if conditions:
+            query += "\tWHERE " + "\n\t\tAND ".join(conditions)
 
-        query += condition
         data = self.db.read_sql(query).iloc[0]
         output = {**output, **data.to_dict()}
 
@@ -92,8 +147,8 @@ class DataAnalytics:
 
     def get_repo_report(
         self,
-        start_date: str,
-        end_date: str,
+        creation_date_range: str = None,
+        last_commit_date_range: str = None,
         languages: list = None,
         topics: list = None,
         licenses: list = None,
@@ -124,31 +179,6 @@ class DataAnalytics:
         FROM {self.schema}.repo AS r
         """
 
-        conditions = [
-            f"r.creation_date > '{start_date}'",
-            f"r.creation_date < '{end_date}'",
-        ]
-
-        if languages:
-            languages = self._fix_values(languages)
-            conditions.append(f'r."language" IN {languages}')
-
-        if licenses:
-            licenses = self._fix_values(licenses)
-            conditions.append(f"r.license IN {licenses}")
-
-        if exclude_archived:
-            conditions.append("r.archived = 0")
-
-        if exclude_without_wiki:
-            conditions.append("r.has_wiki = 1")
-
-        if exclude_without_license:
-            conditions.append("r.license != '__NA__'")
-
-        if exclude_without_wiki:
-            conditions.append("r.has_wiki = 1")
-
         select_topics = f"""
             SELECT DISTINCT repo_id
             FROM {self.schema}.repo_topic AS rt
@@ -167,7 +197,18 @@ class DataAnalytics:
             ) AS selected_repos ON selected_repos.repo_id = r.id
             """
 
-        query += "\tWHERE " + "\n\t\tAND ".join(conditions)
+        conditions = self._get_conditions(
+            creation_date_range=creation_date_range,
+            last_commit_date_range=last_commit_date_range,
+            languages=languages,
+            licenses=licenses,
+            exclude_archived=exclude_archived,
+            exclude_without_license=exclude_without_license,
+            exclude_without_wiki=exclude_without_wiki,
+        )
+        if conditions:
+            query += "\tWHERE " + "\n\t\tAND ".join(conditions)
+
         query += f"\n\tORDER BY r.{sort_by} DESC"
 
         if limit:
@@ -200,8 +241,10 @@ class DataAnalytics:
 
     @staticmethod
     def get_topic_report(data, threshold: int = 10):
-        data = data.groupby("topic")["n_repos"].sum().value_counts()
+        data = data.groupby("topic")["n_repos"].sum().value_counts().sort_index()
+        data.name = "n_repos"
         output = data[data.index < threshold]
-        output.loc[f"{threshold}+"] = data[data.index >= threshold].sum()
+        value = min(threshold, max(data.index))
+        output.loc[f"{value}+"] = data[data.index >= value].sum()
         output.index.name = "freq"
         return output.reset_index()
