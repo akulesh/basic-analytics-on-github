@@ -2,16 +2,7 @@
 *.paruquet
 **tmp/
 **/.DS_Store
-
-# Docker volumes
 volumes/*
-!volumes/.gitkeep
-!volumes/.pgadmin/.gitkeep
-!volumes/.postgres/.gitkeep
-!volumes/.prefect/.gitkeep
-!volumes/data/.gitkeep
-!volumes/data/.sample
-!volumes/data/repos/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

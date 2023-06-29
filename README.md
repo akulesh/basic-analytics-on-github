@@ -79,3 +79,4 @@ PYTHONPATH=. streamlit run src/app.py
 - https://github.com/rpeden/prefect-docker-compose/blob/main/docker-compose.yml
 - https://docs.prefect.io/2.10.16/concepts/deployments/
 - https://gist.github.com/rxaviers/7360908
+- https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-using-volumes.html

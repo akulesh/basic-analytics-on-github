@@ -16,8 +16,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
     volumes:
-      - ./volumes/pg-data:/var/lib/postgresql/data
-      - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh
+      - ${PATH_POSTGRES_DATA:-"./volumes/.postgres/data/"}:/var/lib/postgresql/data
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh
     ports:
       - "5432:5432"
     networks:
@@ -31,7 +31,7 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
       - PGADMIN_CONFIG_SERVER_MODE=False
     volumes:
-      - ./volumes/pgadmin-data:/var/lib/pgadmin
+      - ${PATH_PGADMIN_DATA:-"./volumes/.pgadmin/data"}:/var/lib/pgadmin
     ports:
       - "5050:80"
     networks:
@@ -55,7 +55,7 @@ services:
     ports:
       - "4200:4200"
     volumes:
-      - ./volumes/prefect:/root/.prefect
+      - ${PATH_PREFECT_DATA:-"./volumes/.prefect/data"}:/root/.prefect
     networks:
       - app
       - prefect
@@ -83,7 +83,7 @@ services:
       - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
       - PYTHONPATH=/app
     volumes:
-      - ./volumes/data/raw/repos:/app/volumes/data/raw/repos
+      - ${PATH_RAW_DATA:-"./volumes/data/"}:${DOCKER_PATH_RAW_DATA:-/app/volumes/data}
     command: "bash /app/src/etl/run.sh"
     networks:
       - app

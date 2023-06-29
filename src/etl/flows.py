@@ -1,5 +1,6 @@
 import argparse
 import time
+import os
 
 from prefect import flow
 
@@ -60,15 +61,15 @@ def transform_load(
 
 @flow(name="etl-flow", flow_run_name="ETL Flow", log_prints=True)
 def run_etl(
-    source_dir: str = "./volumes/data/raw/repos",
-    skip_extraction: bool = False,
-    start_date: str = None,
-    end_date: str = None,
+    source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/app/volumes/data"),
+    start_date: str = "2020-01-01",
+    end_date: str = "2020-01-01",
     languages: list | str = None,
+    skip_extraction: bool = False,
     overwrite_existed_files: bool = False,
     min_stars_count: int = 1,
-    db_config: dict = None,
     api_token: str = None,
+    db_config: dict = None,
     **kwargs,
 ):
     languages = get_languages(languages)
@@ -98,7 +99,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_date", default="2020-01-01")
     parser.add_argument("--end_date", default=None)
-    parser.add_argument("--source_dir", default="./volumes/data/raw/repos")
+    parser.add_argument("--source_dir", default="./tmp/data")
     parser.add_argument("--languages", default=None)
     parser.add_argument("--skip_extraction", action="store_true")
     parser.add_argument("--overwrite_existed_files", action="store_true")
@@ -106,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--db_password", default=None)
     parser.add_argument("--db_host", default="0.0.0.0")
     parser.add_argument("--db_port", type=int, default=5432)
-    parser.add_argument("--db_name", default="postgres")
+    parser.add_argument("--db_name", default=os.getenv("POSTGRES_DB", "postgres"))
     args = parser.parse_args()
 
     run_etl(

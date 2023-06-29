@@ -22,7 +22,7 @@ class RepoMetadataExtractor:
 
     def __init__(
         self,
-        output_dir: str = "./data",
+        output_dir: str = "./tmp/data",
         min_pushed_date: str = None,
         max_items_per_page: int = 100,
         retry_attempts: int = 3,
@@ -34,7 +34,7 @@ class RepoMetadataExtractor:
         api_token: str = None,
     ):
         self.headers = get_headers(api_token)
-        self.output_dir = output_dir
+        self.output_dir = os.path.join(output_dir, "repos")
         self.pagination_timeout = pagination_timeout
         self.timeout = timeout
         self.retry_attempts = retry_attempts
@@ -157,8 +157,8 @@ class RepoMetadataExtractor:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_date", default="2020-01-01")
-    parser.add_argument("--end_date", default=None)
-    parser.add_argument("--output_dir", default="./data/raw/repositories")
+    parser.add_argument("--end_date", default="2020-01-01")
+    parser.add_argument("--output_dir")
     parser.add_argument("--languages", default=None)
     parser.add_argument("--min_pushed_date", default="2020-01-01")
     parser.add_argument("--min_stars_count", type=int, default=1)
