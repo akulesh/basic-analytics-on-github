@@ -242,9 +242,10 @@ class DataAnalytics:
     @staticmethod
     def get_topic_report(data, threshold: int = 10):
         data = data.groupby("topic")["n_repos"].sum().value_counts().sort_index()
-        data.name = "n_repos"
+        data.name = "count"
         output = data[data.index < threshold]
         value = min(threshold, max(data.index))
-        output.loc[f"{value}+"] = data[data.index >= value].sum()
+        if value >= threshold:
+            output.loc[f"{value}+"] = data[data.index >= value].sum()
         output.index.name = "freq"
         return output.reset_index()

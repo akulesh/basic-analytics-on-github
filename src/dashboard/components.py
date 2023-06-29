@@ -92,8 +92,8 @@ def add_multiselect(
 
 
 def plot_corr_matrix_heatmap(data: pd.DataFrame, columns=None, title=None):
-    df = data[columns].corr()
-    annotation = df.applymap(lambda x: f"{round(x*100)}%")
+    df = (data[columns].corr() * 100).round(1)
+    annotation = df.applymap(lambda x: f"{x}%")
     fig = px.imshow(df, color_continuous_scale="mint")
     fig.update_traces(text=annotation, texttemplate="%{text}")
     fig.update_coloraxes(showscale=False)
@@ -103,10 +103,20 @@ def plot_corr_matrix_heatmap(data: pd.DataFrame, columns=None, title=None):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def plot_bar_chart(df, group, metric, labels=None, title=None, marker_color="steelblue"):
-    fig = px.bar(df, x=group, y=metric, text=metric, labels=labels)
+def plot_bar_chart(
+    df,
+    group,
+    metric,
+    labels=None,
+    title=None,
+    update_xaxes=True,
+    marker_color="steelblue",
+    **kwargs,
+):
+    fig = px.bar(df, x=group, y=metric, text=metric, labels=labels, **kwargs)
     fig.update_traces(marker_color=marker_color)
-    fig.update_xaxes(tickmode="array", tickvals=list(df[group]), type="category")
+    if update_xaxes:
+        fig.update_xaxes(tickmode="auto", tickvals=list(df[group]), type="category")
 
     if title:
         st.markdown(f"##### {title}")

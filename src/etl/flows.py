@@ -73,6 +73,7 @@ def run_etl(
     **kwargs,
 ):
     languages = get_languages(languages)
+    source_dir = os.path.join(source_dir, "repos")
 
     if not skip_extraction:
         extract(

@@ -22,7 +22,7 @@ class RepoMetadataExtractor:
 
     def __init__(
         self,
-        output_dir: str = "./tmp/data",
+        output_dir: str = "./tmp/data/repos",
         min_pushed_date: str = None,
         max_items_per_page: int = 100,
         retry_attempts: int = 3,
@@ -34,7 +34,7 @@ class RepoMetadataExtractor:
         api_token: str = None,
     ):
         self.headers = get_headers(api_token)
-        self.output_dir = os.path.join(output_dir, "repos")
+        self.output_dir = output_dir
         self.pagination_timeout = pagination_timeout
         self.timeout = timeout
         self.retry_attempts = retry_attempts

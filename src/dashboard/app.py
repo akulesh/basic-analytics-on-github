@@ -41,15 +41,15 @@ class Dashboard:
     @staticmethod
     def add_kpi_block(kpi_report):
         cols = st.columns(4)
-        cols[0].metric("Number of Repositories", int(kpi_report["n_repos"]))
-        cols[1].metric("Number of Owners", int(kpi_report["n_owners"]))
-        cols[2].metric("Number of Languages", int(kpi_report["n_languages"]))
-        cols[3].metric("Number of Topics", int(kpi_report["n_topics"]))
+        cols[0].metric("Number of Repositories", int(kpi_report["n_repos"] or 0))
+        cols[1].metric("Number of Owners", int(kpi_report["n_owners"] or 0))
+        cols[2].metric("Number of Languages", int(kpi_report["n_languages"] or 0))
+        cols[3].metric("Number of Topics", int(kpi_report["n_topics"] or 0))
 
-        cols[0].metric("Avg. Number of Stars", round(kpi_report["stars"], 1))
+        cols[0].metric("Avg. Number of Stars", round(kpi_report["stars"] or 0, 1))
         cols[1].metric("Avg. Number of Watchers", "--")
-        cols[2].metric("Avg. Number of Forks", round(kpi_report["forks"], 1))
-        cols[3].metric("Avg. Number of Open Issues", round(kpi_report["open_issues"], 1))
+        cols[2].metric("Avg. Number of Forks", round(kpi_report["forks"] or 0, 1))
+        cols[3].metric("Avg. Number of Open Issues", round(kpi_report["open_issues"] or 0, 1))
 
     @staticmethod
     def plot_has_license(data):
@@ -111,8 +111,17 @@ class Dashboard:
     @staticmethod
     def plot_repos_by_language(data):
         # Language
-        df = data.groupby("language").agg({"n_repos": sum}).reset_index()
-        plot_pie_chart(df, group="language", metric="n_repos", title="Repository primary language")
+        df = data.groupby("language").agg({"n_repos": sum}).sort_values(by="n_repos").reset_index()
+        plot_bar_chart(
+            df,
+            group="n_repos",
+            metric="language",
+            update_xaxes=False,
+            title="Repository primary language",
+            orientation="h",
+            color="n_repos",
+            marker_color="rebeccapurple",
+        )
 
     @staticmethod
     def plot_repos_by_branch(data, top_n=5):
@@ -177,9 +186,9 @@ class Dashboard:
         plot_bar_chart(
             df,
             group="freq",
-            metric="n_repos",
+            metric="count",
             title="How many times a topic is mentioned?",
-            labels={"freq": "Topic frequency", "n_repos": "Number of repositories"},
+            labels={"freq": "Topic frequency", "count": "Number of topics"},
         )
 
     @staticmethod
@@ -384,7 +393,9 @@ class Dashboard:
             last_commit_date_range=last_commit_date_range,
             languages=lang_filter,
         )
-        self.add_main_block(repo_analytics, topic_analytics)
+        if not repo_analytics.empty and not topic_analytics.empty:
+            self.add_main_block(repo_analytics, topic_analytics)
+
         topics = self.get_topics(topic_analytics)
         licenses = self.get_licenses(repo_analytics)
         self.add_repo_report(
@@ -392,6 +403,7 @@ class Dashboard:
             last_commit_date_range=last_commit_date_range,
             topics=topics,
             licenses=licenses,
+            languages=lang_filter,
             limit=100,
         )
 

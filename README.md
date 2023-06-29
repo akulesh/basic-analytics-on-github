@@ -64,7 +64,9 @@ PYTHONPATH=. python src/etl/deploy.py
 
 ## Run Dashboard
 ```
-PYTHONPATH=. streamlit run src/app.py
+source .env
+export POSTGRES_HOST=0.0.0.0
+PYTHONPATH=. streamlit run src/dashboard/app.py
 ```
 
 # References:
