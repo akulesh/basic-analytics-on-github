@@ -56,15 +56,15 @@ def transform_load(
 
     time.sleep(1)
     stats = db.get_table_stats()
-    print(f"\tTables info:\n\t{stats}")
+    print(f"Tables info:\n{stats}")
 
 
 @flow(name="etl-flow", flow_run_name="ETL Flow", log_prints=True)
 def run_etl(
-    source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/app/volumes/data"),
+    source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/volumes/data"),
     start_date: str = "2020-01-01",
     end_date: str = "2020-01-01",
-    languages: list | str = None,
+    languages: str | list = None,
     skip_extraction: bool = False,
     overwrite_existed_files: bool = False,
     min_stars_count: int = 1,
@@ -74,6 +74,7 @@ def run_etl(
 ):
     languages = get_languages(languages)
     source_dir = os.path.join(source_dir, "repos")
+    print(f"Source directory: {source_dir}")
 
     if not skip_extraction:
         extract(

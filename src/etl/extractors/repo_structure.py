@@ -10,10 +10,11 @@ from tqdm import tqdm
 from prefect import flow
 
 from src.utils.api import make_safe_request, get_headers, get_languages
+from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
-SUPPORTED_LANGUAGES = ["python", "jupyter-notebook"]
+SUPPORTED_LANGUAGES = ["Python", "Jupyter Notebook"]
 
 
 class RepoStructureExtractor:
@@ -21,6 +22,7 @@ class RepoStructureExtractor:
 
     def __init__(
         self,
+        output_dir: str,
         api_token: str = None,
         retry_attempts: int = 3,
         timeout: int = 30,
@@ -29,10 +31,11 @@ class RepoStructureExtractor:
         self.headers = get_headers(api_token)
         self.retry_attempts = retry_attempts
         self.timeout = timeout
-        self.languages = get_languages(languages)
+        self.languages = languages or SUPPORTED_LANGUAGES
+        self.output_dir = output_dir
 
-    def get_repo_structure(self, full_name: str, branch: str):
-        url = f"https://api.github.com/repos/{full_name}/git/trees/{branch}?recursive=1"
+    def fetch_repo_structure(self, owner: str, repo: str, branch: str):
+        url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
         response = make_safe_request(
             url,
             headers=self.headers,
@@ -41,46 +44,55 @@ class RepoStructureExtractor:
         ).json()
 
         data = pd.DataFrame(response["tree"])
-        data["full_name"] = full_name
+        data["owner"] = owner
+        data["repo"] = repo
         data["branch"] = branch
-        columns = ["full_name", "branch", "path", "type", "url", "size"]
+        columns = ["owner", "repo", "branch", "path", "type", "url", "size"]
 
         return data[columns]
 
-    def extract_repo_structure(
+    @staticmethod
+    def select_repo_info(
+        db, language: str, creation_date: str, min_stars: int = 1, limit: int = None
+    ):
+        q = f"""
+        SELECT owner, name AS repo, default_branch AS branch
+        FROM github.repo
+        WHERE language = '{language}'
+            AND creation_date = '{creation_date}'
+            AND stars >= {min_stars}
+        """
+
+        if limit:
+            q += f"LIMIT {limit}"
+
+        data = db.read_sql(q)
+        data = data.drop_duplicates()
+
+        return data
+
+    def extract(
         self,
-        input_dir,
-        created_at: str,
-        output_dir: str,
-        language: str = "python",
-        min_stars_count: int = 1,
+        repo_df: pd.DataFrame,
+        language: str,
+        creation_date: str = None,
         path_pattern: str = None,
-        limit=None,
         overwrite_existed_files: bool = False,
     ):
-        filename = os.path.join(output_dir, f"language={language}", f"{created_at}.parquet")
+        filename = os.path.join(self.output_dir, f"language={language}", f"{creation_date}.parquet")
         if not overwrite_existed_files and os.path.exists(filename):
             logger.info(f"overwrite_existed_files: {overwrite_existed_files}")
             logger.info(f"File '{filename}' already exists!")
-            return output_dir
+            return self.output_dir
 
-        input_path = os.path.join(input_dir, f"language={language}", f"{created_at}.parquet")
-        if not os.path.exists(input_path):
-            logger.warning(f"File '{input_path}' does not exist!")
-            return output_dir
-
-        columns = ["full_name", "default_branch", "stargazers_count"]
-        data = pd.read_parquet(input_path, columns=columns)
-        data = data[data["stargazers_count"] >= min_stars_count]
-        logger.info(f"Input data shape: {data.shape}")
-
-        if limit:
-            data = data[:limit]
-        logger.info(f"Limit: {limit}")
+        n_rows, n_cols = repo_df.shape
+        logger.info(f"Repo data shape: {n_rows, n_cols}")
 
         output = []
-        for _, row in tqdm(data.iterrows(), total=len(data)):
-            df = self.get_repo_structure(full_name=row["full_name"], branch=row["default_branch"])
+        for _, row in tqdm(repo_df.iterrows(), total=n_rows):
+            df = self.fetch_repo_structure(
+                owner=row["owner"], repo=row["repo"], branch=row["branch"]
+            )
             output.append(df)
 
         output = pd.concat(output)
@@ -94,14 +106,15 @@ class RepoStructureExtractor:
         else:
             logger.info("The output is empty!")
 
-        return output_dir
+        return self.output_dir
 
     def run(
         self,
-        input_dir: str,
-        output_dir: str,
+        db: DBHandler,
         start_date: str,
         end_date: str = None,
+        min_stars: int = 1,
+        limit: int = None,
         **kwargs,
     ):
         end_date = end_date or start_date
@@ -111,20 +124,18 @@ class RepoStructureExtractor:
 
         dates = pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
 
-        for created_at in dates:
-            logger.info(f"Created date: '{created_at}'")
+        for creation_date in dates:
+            logger.info(f"Created date: '{creation_date}'")
 
             for language in self.languages:
                 logger.info(f"🕐 Language: {language}")
-                self.extract_repo_structure(
-                    input_dir=input_dir,
-                    created_at=created_at,
-                    output_dir=output_dir,
-                    language=language,
-                    **kwargs,
+                repo_df = self.select_repo_info(
+                    db, language, creation_date, min_stars=min_stars, limit=limit
                 )
+                if not repo_df.empty:
+                    self.extract(repo_df, language, creation_date=creation_date, **kwargs)
 
-            logger.info(f"✅ Processing completed for 'created_at={created_at}'!")
+            logger.info(f"✅ Processing completed for 'creation_date={creation_date}'!")
 
 
 @flow(
