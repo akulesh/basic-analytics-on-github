@@ -106,7 +106,7 @@ services:
       - POSTGRES_SCHEMA=${POSTGRES_SCHEMA:-github}
       - API_TOKEN=${API_TOKEN}
     ports:
-      - "8501:8501"
+      - ${DASHBOARD_PORT:-8501}:8501
     networks:
       - app
     depends_on:
