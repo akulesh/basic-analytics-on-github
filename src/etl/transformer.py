@@ -167,31 +167,19 @@ class DataTransformer:
                     data.loc[:, "language"] = SUPPORTED_LANGUAGES.get(lang, lang)
                     self.update_tables(data, _mapping)
                 else:
-                    logger.warning(f"File '{filename}' does not exists.")
+                    logger.warning(f"File '{filename}' does not exist.")
+
+            logger.info(f"✅ Processing completed for '{lang}'!")
 
         for table, val in mapping.items():
-            logger.info(f"Cleaning table '{table}' from duplicates...")
             self.db.drop_duplicates(table=table, key_columns=val["key_columns"])
-            logger.info("Duplicated are dropped.")
-
-
-@flow(flow_run_name="Github Data Transformation Flow", log_prints=True)
-def run_transformation_flow(db, input_dir: str, start_date: str, end_date: str, languages: list):
-    transformer = DataTransformer(db)
-    transformer.run(
-        input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
-    )
-
-    aggregator = DataAggregator(db)
-    aggregator.run()
-
-    time.sleep(1)
-    stats = db.get_table_stats()
-    logger.info(f"\tTables info:\n\t{stats}")
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--input_dir")
+    parser.add_argument("--start_date")
+    parser.add_argument("--end_date")
     parser.add_argument("--input_dir")
     parser.add_argument("--languages", default=None)
     parser.add_argument("--limit", type=int, default=None)
@@ -213,9 +201,20 @@ def main():
         db_schema="github",
     )
 
-    run_transformation_flow(
-        db, input_dir=args.input_dir, languages=get_languages(args.languages), limit=args.limit
+    transformer = DataTransformer(db)
+    transformer.run(
+        input_dir=args.input_dir,
+        start_date=args.start_date,
+        end_date=args.end_date,
+        languages=args.languages,
     )
+
+    aggregator = DataAggregator(db)
+    aggregator.run(args.start_date, args.end_date)
+
+    time.sleep(1)
+    stats = db.get_table_stats()
+    logger.info(f"\tTables info:\n\t{stats}")
 
 
 if __name__ == "__main__":

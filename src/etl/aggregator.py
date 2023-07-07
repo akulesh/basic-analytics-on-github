@@ -1,6 +1,8 @@
 from src.utils.db_handler import DBHandler
+from src.utils.logger import logger
 
 
+# TODO: refactor tables update (check 'drop_duplicates' method)
 class DataAggregator:
     """Aggregate data and create tables for analytics"""
 
@@ -8,13 +10,9 @@ class DataAggregator:
         self.db = db
         self.schema = db.schema
 
-    def clear_table(self, table):
-        q = f"""DELETE FROM {self.schema}.{table}"""
-        self.db.execute(q)
-
-    def create_repo_analytics_table(self, table="repo_analytics"):
-        self.clear_table(table)
-
+    def update_repo_analytics_table(
+        self, start_date: str, end_date: str, table: str = "repo_analytics"
+    ):
         q = f"""
         INSERT INTO {self.schema}.{table} (
             language,
@@ -62,6 +60,8 @@ class DataAggregator:
             CEIL(AVG(days_since_creation)) AS days_since_creation,
             CEIL(AVG(days_since_last_commit)) AS days_since_last_commit
         FROM {self.schema}.repo AS r
+        WHERE creation_date >= '{start_date}'
+            AND creation_date <= '{end_date}'
         GROUP BY "language",
                  license,
                  default_branch,
@@ -71,10 +71,21 @@ class DataAggregator:
                  last_commit_year
         """
         self.db.execute(q)
+        self.db.drop_duplicates(
+            table,
+            key_columns=[
+                "language",
+                "license",
+                "default_branch",
+                "creation_date",
+                "last_commit_date",
+            ],
+            date_col="updated_at",
+        )
 
-    def create_topic_analytics_table(self, table="topic_analytics"):
-        self.clear_table(table)
-
+    def update_topic_analytics_table(
+        self, start_date: str, end_date: str, table: str = "topic_analytics"
+    ):
         q = f"""
         INSERT INTO {self.schema}.{table} (
             language,
@@ -91,11 +102,22 @@ class DataAggregator:
             COUNT(DISTINCT rt.repo_id) AS n_repos
         FROM {self.schema}.repo_topic AS rt
         JOIN {self.schema}.repo AS r ON r.id = rt.repo_id
+        WHERE creation_date >= '{start_date}'
+            AND creation_date <= '{end_date}'
         GROUP BY r."language", topic, creation_date, last_commit_date
-        ORDER BY n_repos DESC;
         """
         self.db.execute(q)
+        self.db.drop_duplicates(
+            table,
+            key_columns=["language", "topic", "creation_date", "last_commit_date"],
+            date_col="updated_at",
+        )
 
-    def run(self):
-        self.create_topic_analytics_table()
-        self.create_repo_analytics_table()
+    def run(self, start_date: str, end_date: str):
+        logger.info("Updating 'topic_analytics' table...")
+        self.update_topic_analytics_table(start_date, end_date)
+        logger.info("✅ Table has been updated!")
+
+        logger.info("Updating 'repo_analytics' table...")
+        self.update_repo_analytics_table(start_date, end_date)
+        logger.info("✅ Table has been updated!")

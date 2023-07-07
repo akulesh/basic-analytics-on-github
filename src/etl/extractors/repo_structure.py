@@ -9,7 +9,7 @@ import pandas as pd
 from tqdm import tqdm
 from prefect import flow
 
-from src.utils.api import make_safe_request, get_headers, get_languages
+from src.utils.api import make_safe_request, get_headers
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 

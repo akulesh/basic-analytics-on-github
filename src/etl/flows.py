@@ -11,9 +11,14 @@ from src.utils.db_handler import DBHandler
 from src.utils.api import SUPPORTED_LANGUAGES, get_languages
 
 
+def get_db_session(db_config: dict = None):
+    db_config = db_config or {}
+    return DBHandler(**db_config)
+
+
 @flow(
     name="repo-metadata-extraction",
-    flow_run_name="Github Repo Metadata Extraction Flow",
+    flow_run_name="Extraction Subflow",
     log_prints=True,
 )
 def extract(
@@ -22,37 +27,39 @@ def extract(
     end_date: str = None,
     languages: str | list = None,
     overwrite_existed_files: bool = False,
-    min_stars_count: int = 1,
+    db_config: dict = None,
     **kwargs,
 ):
-    extractor = RepoMetadataExtractor(output_dir=output_dir, **kwargs)
+    db = get_db_session(db_config)
+    extractor = RepoMetadataExtractor(output_dir=output_dir, db=db, **kwargs)
     extractor.run(
         start_date=start_date,
         end_date=end_date,
         languages=languages or SUPPORTED_LANGUAGES,
-        min_stars_count=min_stars_count,
         overwrite=overwrite_existed_files,
     )
 
 
 @flow(
     name="repo-metadata-transformation",
-    flow_run_name="Data Transformation Subflow",
+    flow_run_name="Transformation Subflow",
     log_prints=True,
 )
 def transform_load(
-    input_dir: str, start_date: str, end_date: str = None, languages: list = None, db_config=None
+    input_dir: str,
+    start_date: str,
+    end_date: str = None,
+    languages: list = None,
+    db_config: dict = None,
 ):
-    db_config = db_config or {}
-    db = DBHandler(**db_config)
-
+    db = get_db_session(db_config)
     transformer = DataTransformer(db)
     transformer.run(
         input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
     )
 
     aggregator = DataAggregator(db)
-    aggregator.run()
+    aggregator.run(start_date, end_date)
 
     time.sleep(1)
     stats = db.get_table_stats()
@@ -85,6 +92,7 @@ def run_etl(
             overwrite_existed_files=overwrite_existed_files,
             min_stars_count=min_stars_count,
             api_token=api_token,
+            db_config=db_config,
             **kwargs,
         )
 
