@@ -9,6 +9,7 @@ import os
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from src.utils.logger import logger
 
 
 def create_db_session(
@@ -57,17 +58,20 @@ class DBHandler:
         with self.engine.begin() as connection:
             return connection.execute(q)
 
-    def drop_duplicates(self, table: str, key_columns: list):
+    def drop_duplicates(self, table: str, key_columns: list, date_col: str = "updated_at"):
+        logger.info(f"Cleaning '{table}' table from duplicates...")
+
         q = f"""
         DELETE FROM {self.schema}.{table} t1
             USING {self.schema}.{table} t2
-        WHERE t1.updated_at < t2.updated_at
+        WHERE t1.{date_col} < t2.{date_col}
         """
 
         for col in key_columns:
             q += f"\tAND t1.{col} = t2.{col}"
 
         self.execute(q)
+        logger.info("✅ Duplicates are dropped!")
 
     def update_table(self, data: pd.DataFrame, table: str):
         columns = pd.read_sql(
@@ -78,6 +82,10 @@ class DBHandler:
         data[columns].to_sql(
             table, con=self.engine, if_exists="append", index=False, schema=self.schema
         )
+
+    def clear_table(self, table):
+        q = f"""DELETE FROM {self.schema}.{table}"""
+        self.execute(q)
 
     def get_table_stats(self):
         q = f"""

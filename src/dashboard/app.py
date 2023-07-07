@@ -4,6 +4,7 @@ TODO: check caching
 """
 
 import argparse
+from datetime import datetime
 
 import streamlit as st
 
@@ -17,7 +18,6 @@ from src.dashboard.components import (
     plot_corr_matrix_heatmap,
     plot_wordcloud,
 )
-from src.utils.db_handler import create_db_session
 
 
 @st.cache_resource
@@ -31,25 +31,36 @@ def get_filters_info(_da: DataAnalytics):
     return _da.get_filters_info()
 
 
+@st.cache_data
+def get_topics_data(_da: DataAnalytics):
+    return _da.get_topics_data()
+
+
+@st.cache_data
+def get_last_updated_date():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 class Dashboard:
     """Streamlit-based dashboard with GitHub analytics"""
 
     def __init__(self, db_username=None, db_password=None, **kwargs):
         self.da = create_data_session(db_username=db_username, db_password=db_password, **kwargs)
-        self.filters_info = get_filters_info(self.da)
+        self.filters_df = get_filters_info(self.da)
+        self.topics_df = get_topics_data(self.da)
 
     @staticmethod
     def add_kpi_block(kpi_report):
         cols = st.columns(4)
-        cols[0].metric("Number of Repositories", int(kpi_report["n_repos"] or 0))
-        cols[1].metric("Number of Owners", int(kpi_report["n_owners"] or 0))
-        cols[2].metric("Number of Languages", int(kpi_report["n_languages"] or 0))
-        cols[3].metric("Number of Topics", int(kpi_report["n_topics"] or 0))
+        cols[0].metric("Number of Repositories", int(kpi_report.get("n_repos") or 0))
+        cols[1].metric("Number of Owners", int(kpi_report.get("n_owners") or 0))
+        cols[2].metric("Number of Languages", int(kpi_report.get("language") or 0))
+        cols[3].metric("Number of Topics", int(kpi_report.get("n_topics") or 0))
 
-        cols[0].metric("Avg. Number of Stars", round(kpi_report["stars"] or 0, 1))
+        cols[0].metric("Avg. Number of Stars", round(kpi_report.get("stars") or 0, 1))
         cols[1].metric("Avg. Number of Watchers", "--")
-        cols[2].metric("Avg. Number of Forks", round(kpi_report["forks"] or 0, 1))
-        cols[3].metric("Avg. Number of Open Issues", round(kpi_report["open_issues"] or 0, 1))
+        cols[2].metric("Avg. Number of Forks", round(kpi_report.get("forks") or 0, 1))
+        cols[3].metric("Avg. Number of Open Issues", round(kpi_report.get("open_issues") or 0, 1))
 
     @staticmethod
     def plot_has_license(data):
@@ -193,15 +204,15 @@ class Dashboard:
 
     @staticmethod
     def plot_topic_cloud(data, top_n=100):
-        data = data.groupby("topic")["n_repos"].sum().sort_values(ascending=False)[:top_n].to_dict()
+        data = data[:top_n]
+        data = dict(zip(data["topic"], data["n_repos"]))
         data.pop("__NA__", None)
         plot_wordcloud(data, title="The most popular topics")
 
     @staticmethod
     def get_topics(data, threshold: int = 10):
-        stats = data.groupby("topic")["n_repos"].sum().sort_values(ascending=False)
-        stats = stats[stats >= threshold].to_dict()
-        return list(stats.keys())
+        data = data[data["n_repos"] >= threshold]
+        return list(data["topic"])
 
     @staticmethod
     def get_licenses(data):
@@ -316,8 +327,8 @@ class Dashboard:
             self.plot_repos_by_language(repos_df)
             self.plot_has_license(repos_df)
             self.plot_is_archived(repos_df)
-            self.plot_repos_by_branch(repos_df)
-            self.plot_topic_cloud(topics_df)
+            # self.plot_repos_by_branch(repos_df)
+            self.plot_has_topic(repos_df)
 
         with cols[1]:
             self.plot_repos_by_last_commit_year(repos_df)
@@ -335,8 +346,8 @@ class Dashboard:
             )
             self.plot_repos_by_license(repos_df, top_n=5)
             self.plot_wiki(repos_df)
-            self.plot_has_topic(repos_df)
-            self.plot_topics_freq(topics_df, threshold=10)
+            if not topics_df.empty:
+                self.plot_topic_cloud(topics_df)
 
     def build(self):
         st.title("📊 Github Analytics Dashboard")
@@ -348,23 +359,23 @@ class Dashboard:
             icon="ℹ️",
         )
 
-        if self.filters_info.empty:
+        if self.filters_df.empty:
             return st.markdown("⛔ Data is not prepared! Please load the data into the DB.")
 
         st.sidebar.title("")
 
-        min_year, max_year = int(self.filters_info["creation_start_year"].min()), int(
-            self.filters_info["creation_end_year"].max()
+        min_year, max_year = int(self.filters_df["creation_start_year"].min()), int(
+            self.filters_df["creation_end_year"].max()
         )
         creation_date_range = add_date_picker(min_year, max_year)
 
-        min_year, max_year = int(self.filters_info["last_commit_start_year"].min()), int(
-            self.filters_info["last_commit_end_year"].max()
+        min_year, max_year = int(self.filters_df["last_commit_start_year"].min()), int(
+            self.filters_df["last_commit_end_year"].max()
         )
         last_commit_date_range = add_date_picker(min_year, max_year, key_prefix="last_commit_date")
 
         st.sidebar.header("🌐 Primary Language")
-        language_list = list(self.filters_info["language"])
+        language_list = list(self.filters_df["language"])
         lang_filter = add_multiselect(
             f=st.sidebar,
             options=language_list,
@@ -374,30 +385,25 @@ class Dashboard:
             reset_button_name="Select All",
         )
 
-        kpi_report = self.da.get_kpi_report(
+        repos_df = self.da.get_repo_analytics_data(
             creation_date_range=creation_date_range,
             last_commit_date_range=last_commit_date_range,
             languages=lang_filter,
         )
+
+        kpi_report = self.da.get_kpi_report(repos_df)
         self.add_kpi_block(kpi_report)
 
-        repo_analytics = self.da.get_analytics_data(
-            "repo_analytics",
-            creation_date_range=creation_date_range,
-            last_commit_date_range=last_commit_date_range,
-            languages=lang_filter,
-        )
-        topic_analytics = self.da.get_analytics_data(
-            "topic_analytics",
-            creation_date_range=creation_date_range,
-            last_commit_date_range=last_commit_date_range,
-            languages=lang_filter,
-        )
-        if not repo_analytics.empty and not topic_analytics.empty:
-            self.add_main_block(repo_analytics, topic_analytics)
+        if len(language_list) != len(lang_filter):
+            topics_df = self.topics_df[self.topics_df["language"].isin(lang_filter)]
+        else:
+            topics_df = self.topics_df
 
-        topics = self.get_topics(topic_analytics)
-        licenses = self.get_licenses(repo_analytics)
+        if not repos_df.empty:
+            self.add_main_block(repos_df, topics_df)
+
+        topics = self.get_topics(topics_df)
+        licenses = self.get_licenses(repos_df)
         self.add_repo_report(
             creation_date_range=creation_date_range,
             last_commit_date_range=last_commit_date_range,
@@ -406,6 +412,14 @@ class Dashboard:
             languages=lang_filter,
             limit=100,
         )
+
+        st.sidebar.markdown("---")
+        if st.sidebar.button("Clear Cache"):
+            st.cache_resource.clear()
+            st.cache_data.clear()
+
+        updated_at = get_last_updated_date()
+        st.sidebar.markdown(f"> *Last cache update*: `{updated_at}`")
 
 
 def main():
