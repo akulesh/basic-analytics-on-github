@@ -1,14 +1,14 @@
 import argparse
-import time
 import os
+import time
 
 from prefect import flow
 
-from src.etl.extractors.repo_metadata import RepoMetadataExtractor
-from src.etl.transformer import DataTransformer
 from src.etl.aggregator import DataAggregator
-from src.utils.db_handler import DBHandler
+from src.etl.extractors.repo_metadata import PAGINATION_TIMEOUT, RepoMetadataExtractor
+from src.etl.transformer import DataTransformer
 from src.utils.api import SUPPORTED_LANGUAGES, get_languages
+from src.utils.db_handler import DBHandler
 
 
 def get_db_session(db_config: dict = None):
@@ -27,13 +27,19 @@ def extract(
     end_date: str = None,
     languages: str | list = None,
     overwrite_existed_files: bool = False,
-    db_config: dict = None,
+    pagination_timeout: int = PAGINATION_TIMEOUT,
     min_stars_count: int = 1,
+    db_config: dict = None,
     api_token: str = None,
 ):
     db = get_db_session(db_config)
     extractor = RepoMetadataExtractor(
-        output_dir=output_dir, min_stars_count=min_stars_count, api_token=api_token, db=db)
+        output_dir=output_dir,
+        min_stars_count=min_stars_count,
+        pagination_timeout=pagination_timeout,
+        api_token=api_token,
+        db=db,
+    )
     extractor.run(
         start_date=start_date,
         end_date=end_date,
@@ -77,8 +83,9 @@ def run_etl(
     skip_extraction: bool = False,
     overwrite_existed_files: bool = False,
     min_stars_count: int = 1,
+    pagination_timeout: int = PAGINATION_TIMEOUT,
     api_token: str = None,
-    db_config: dict = None
+    db_config: dict = None,
 ):
     languages = get_languages(languages)
     source_dir = os.path.join(source_dir, "repos")
@@ -92,6 +99,7 @@ def run_etl(
             languages=languages,
             overwrite_existed_files=overwrite_existed_files,
             min_stars_count=min_stars_count,
+            pagination_timeout=pagination_timeout,
             api_token=api_token,
             db_config=db_config,
         )
@@ -113,6 +121,8 @@ if __name__ == "__main__":
     parser.add_argument("--languages", default=None)
     parser.add_argument("--skip_extraction", action="store_true")
     parser.add_argument("--overwrite_existed_files", action="store_true")
+    parser.add_argument("--pagination_timeout", type=int, default=PAGINATION_TIMEOUT)
+    parser.add_argument("--min_stars_count", type=int, default=1)
     parser.add_argument("--db_username", default=None)
     parser.add_argument("--db_password", default=None)
     parser.add_argument("--db_host", default="0.0.0.0")
@@ -127,6 +137,8 @@ if __name__ == "__main__":
         languages=args.languages,
         skip_extraction=args.skip_extraction,
         overwrite_existed_files=args.overwrite_existed_files,
+        pagination_timeout=args.pagination_timeout,
+        min_stars_count=args.min_stars_count,
         db_config={
             "db_username": args.db_username,
             "db_password": args.db_password,

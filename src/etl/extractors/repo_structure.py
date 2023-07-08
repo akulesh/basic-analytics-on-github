@@ -2,14 +2,14 @@
 Github API scrapping
 """
 
-import argparse
+# import argparse
+# from prefect import flow
 import os
 
 import pandas as pd
 from tqdm import tqdm
-from prefect import flow
 
-from src.utils.api import make_safe_request, get_headers
+from src.utils.api import get_headers, make_safe_request
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
@@ -138,65 +138,65 @@ class RepoStructureExtractor:
             logger.info(f"✅ Processing completed for 'creation_date={creation_date}'!")
 
 
-@flow(
-    name="repo-structure-extraction",
-    flow_run_name="Repo Structure Extraction Flow",
-    log_prints=True,
-)
-def extract_repo_structure(
-    input_dir: str,
-    output_dir: str,
-    start_date: str = "2020-01-01",
-    end_date: str = None,
-    min_stars_count: int = 1,
-    limit: int = None,
-    path_pattern: str = None,
-    overwrite_existed_files: bool = False,
-    **kwargs,
-):
-    extractor = RepoStructureExtractor(**kwargs)
+# @flow(
+#     name="repo-structure-extraction",
+#     flow_run_name="Repo Structure Extraction Flow",
+#     log_prints=True,
+# )
+# def extract_repo_structure(
+#     input_dir: str,
+#     output_dir: str,
+#     start_date: str = "2020-01-01",
+#     end_date: str = None,
+#     min_stars_count: int = 1,
+#     limit: int = None,
+#     path_pattern: str = None,
+#     overwrite_existed_files: bool = False,
+#     **kwargs,
+# ):
+#     extractor = RepoStructureExtractor(**kwargs)
 
-    extractor.run(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        start_date=start_date,
-        end_date=end_date,
-        min_stars_count=min_stars_count,
-        limit=limit,
-        path_pattern=path_pattern,
-        overwrite_existed_files=overwrite_existed_files,
-    )
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir")
-    parser.add_argument("--output_dir")
-    parser.add_argument("--path_pattern")
-    parser.add_argument("--start_date", default="2020-01-01")
-    parser.add_argument("--end_date", default=None)
-    parser.add_argument("--languages", default=None)
-    parser.add_argument("--min_stars_count", type=int, default=1)
-    parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--api_token", default=None)
-    parser.add_argument("--overwrite_existed_files", action="store_true")
-
-    args = parser.parse_args()
-    logger.info(f"Args: {args}")
-
-    extract_repo_structure(
-        start_date=args.start_date,
-        end_date=args.end_date,
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        languages=args.languages,
-        min_stars_count=args.min_stars_count,
-        path_pattern=args.path_pattern,
-        limit=args.limit,
-        api_token=args.api_token,
-        overwrite_existed_files=args.overwrite_existed_files,
-    )
+#     extractor.run(
+#         input_dir=input_dir,
+#         output_dir=output_dir,
+#         start_date=start_date,
+#         end_date=end_date,
+#         min_stars_count=min_stars_count,
+#         limit=limit,
+#         path_pattern=path_pattern,
+#         overwrite_existed_files=overwrite_existed_files,
+#     )
 
 
-if __name__ == "__main__":
-    main()
+# def main():
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--input_dir")
+#     parser.add_argument("--output_dir")
+#     parser.add_argument("--path_pattern")
+#     parser.add_argument("--start_date", default="2020-01-01")
+#     parser.add_argument("--end_date", default=None)
+#     parser.add_argument("--languages", default=None)
+#     parser.add_argument("--min_stars_count", type=int, default=1)
+#     parser.add_argument("--limit", type=int, default=None)
+#     parser.add_argument("--api_token", default=None)
+#     parser.add_argument("--overwrite_existed_files", action="store_true")
+
+#     args = parser.parse_args()
+#     logger.info(f"Args: {args}")
+
+#     extract_repo_structure(
+#         start_date=args.start_date,
+#         end_date=args.end_date,
+#         input_dir=args.input_dir,
+#         output_dir=args.output_dir,
+#         languages=args.languages,
+#         min_stars_count=args.min_stars_count,
+#         path_pattern=args.path_pattern,
+#         limit=args.limit,
+#         api_token=args.api_token,
+#         overwrite_existed_files=args.overwrite_existed_files,
+#     )
+
+
+# if __name__ == "__main__":
+#     main()

@@ -1,11 +1,11 @@
-from datetime import datetime
 import calendar
+from datetime import datetime
 
+import matplotlib.pyplot as plt
+import pandas as pd
 import plotly.express as px
 import streamlit as st
-import pandas as pd
 from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
 
 def add_date_picker(min_date_year, max_date_year, key_prefix="creation_date"):

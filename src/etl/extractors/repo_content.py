@@ -6,10 +6,10 @@ import argparse
 import os
 
 import pandas as pd
-from tqdm import tqdm
 from prefect import flow
+from tqdm import tqdm
 
-from src.utils.api import make_safe_request, get_headers
+from src.utils.api import get_headers, make_safe_request
 from src.utils.logger import logger
 
 
@@ -80,6 +80,8 @@ class RepoContentExtractor:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             output.to_parquet(output_path, index=False)
             logger.info("Data has been extracted and saved!")
+
+        return output_dir
 
     def run(
         self,

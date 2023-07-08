@@ -8,16 +8,16 @@ from datetime import datetime
 
 import streamlit as st
 
-from src.utils.db_handler import DBHandler
 from src.dashboard.analytics import DataAnalytics
 from src.dashboard.components import (
     add_date_picker,
     add_multiselect,
     plot_bar_chart,
-    plot_pie_chart,
     plot_corr_matrix_heatmap,
+    plot_pie_chart,
     plot_wordcloud,
 )
+from src.utils.db_handler import DBHandler
 
 
 @st.cache_resource
@@ -259,39 +259,39 @@ class Dashboard:
         topics: list = None,
         licenses: list = None,
         languages: list = None,
-        limit: int = None,
     ):
         st.header("⛵ Repository Exploration")
         menu = st.columns([1, 1, 1, 1, 1, 1])
+        params = {}
 
         with menu[0]:
-            exclude_without_topic = st.checkbox("Exclude repos without topics")
+            params["exclude_without_topic"] = st.checkbox("Exclude repos without topics")
 
         with menu[1]:
-            exclude_without_license = st.checkbox("Exclude repos without license")
+            params["exclude_without_license"] = st.checkbox("Exclude repos without license")
 
         with menu[2]:
-            exclude_archived = st.checkbox("Exclude archived repos")
+            params["exclude_archived"] = st.checkbox("Exclude archived repos")
 
         with menu[3]:
-            exclude_without_wiki = st.checkbox("Exclude repos without wiki")
+            params["exclude_without_wiki"] = st.checkbox("Exclude repos without wiki")
 
         menu = st.columns([2, 2, 1, 1, 1, 1])
 
         col = menu[0]
         with col:
-            topic_filter = add_multiselect(
-                col, topics, entity="topic", exclude_empty=exclude_without_topic
+            params["topic_filter"] = add_multiselect(
+                col, topics, entity="topic", exclude_empty=params["exclude_without_topic"]
             )
 
         col = menu[1]
         with col:
-            license_filter = add_multiselect(
-                col, licenses, entity="license", exclude_empty=exclude_without_license
+            params["license_filter"] = add_multiselect(
+                col, licenses, entity="license", exclude_empty=params["exclude_without_license"]
             )
 
         with menu[4]:
-            sort_field = st.selectbox(
+            params["sort_field"] = st.selectbox(
                 "Order By",
                 options=[
                     "stars",
@@ -303,20 +303,15 @@ class Dashboard:
             )
 
         with menu[5]:
-            limit = st.number_input("Limit", min_value=1, max_value=None, value=100, step=50)
+            params["limit"] = st.number_input(
+                "Limit", min_value=1, max_value=None, value=100, step=50
+            )
 
         self.plot_repo_table(
             creation_date_range=creation_date_range,
             last_commit_date_range=last_commit_date_range,
             languages=languages,
-            topics=topic_filter,
-            licenses=license_filter,
-            sort_by=sort_field,
-            exclude_archived=exclude_archived,
-            exclude_without_wiki=exclude_without_wiki,
-            exclude_without_topic=exclude_without_topic,
-            exclude_without_license=exclude_without_license,
-            limit=limit,
+            **params,
         )
 
     def add_main_block(self, repos_df, topics_df):
@@ -360,7 +355,7 @@ class Dashboard:
         )
 
         if self.filters_df.empty:
-            return st.markdown("⛔ Data is not prepared! Please load the data into the DB.")
+            st.markdown("⛔ Data is not prepared! Please load the data into the DB.")
 
         st.sidebar.title("")
 
@@ -410,7 +405,6 @@ class Dashboard:
             topics=topics,
             licenses=licenses,
             languages=lang_filter,
-            limit=100,
         )
 
         st.sidebar.markdown("---")

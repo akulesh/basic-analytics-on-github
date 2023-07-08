@@ -1,8 +1,9 @@
+# TODO: refactor tables update (check 'drop_duplicates' method)
+
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
-# TODO: refactor tables update (check 'drop_duplicates' method)
 class DataAggregator:
     """Aggregate data and create tables for analytics"""
 

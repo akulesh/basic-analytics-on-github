@@ -39,7 +39,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: ./src/prefect/Dockerfile
+      dockerfile: ./src/Dockerfile.prefect
     container_name: prefect-server
     restart: always
     healthcheck:

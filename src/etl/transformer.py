@@ -1,16 +1,15 @@
 import argparse
-from datetime import datetime
-import time
 import os
+import time
+from datetime import datetime
 
 import pandas as pd
 from tqdm import tqdm
-from prefect import flow
 
-from src.utils.db_handler import DBHandler
 from src.etl.aggregator import DataAggregator
+from src.utils.api import SUPPORTED_LANGUAGES
+from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
-from src.utils.api import get_languages, SUPPORTED_LANGUAGES
 
 
 class DataTransformer:

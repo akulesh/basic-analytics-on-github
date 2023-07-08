@@ -237,7 +237,7 @@ class DataAnalytics:
             grouped.groupby(group).agg({metric: sum}).sort_values(by=metric, ascending=False)
         ).reset_index()
 
-    def get_branch_data():
+    def get_branch_data(self):
         pass
 
     @staticmethod
