@@ -160,7 +160,7 @@ class RepoMetadataExtractor:
             filename = self.get_filename(language=language, created_at=created_at)
             if not overwrite and os.path.exists(filename):
                 logger.info(f"File '{filename}' already exists!")
-                return
+                continue
 
             start = time.time()
             df = self.fetch_repos(created_at=created_at, language=language, **kwargs)
