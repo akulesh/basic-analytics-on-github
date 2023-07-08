@@ -1,0 +1,35 @@
+# https://pycqa.github.io/isort/docs/configuration/options
+[tool.isort]
+profile = "black"
+lines_after_imports = 2
+skip = [".gitignore", ".dockerignore"]
+
+[tool.black]
+line-length = 100
+# experimental-string-processing = true
+preview = true
+
+[tool.pylint.message_control]
+disable = [
+    "raw-checker-failed",
+    "bad-inline-option",
+    "locally-disabled",
+    "file-ignored",
+    "fixme",
+    "suppressed-message",
+    "useless-suppression",
+    "deprecated-pragma",
+    "use-symbolic-message-instead",
+    "import-error",
+    "missing-function-docstring",
+    "broad-except",
+    "too-many-instance-attributes",
+    "too-many-locals",
+    "too-many-arguments",
+    "too-few-public-methods",
+    "invalid-name",
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "import-outside-toplevel",
+    "redefined-outer-name",
+]

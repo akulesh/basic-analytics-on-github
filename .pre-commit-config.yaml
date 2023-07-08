@@ -1,0 +1,39 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: local
+    hooks:
+      - id: isort
+        name: isort
+        entry: isort
+        language: system
+        files: (.*py$)
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        entry: black
+        language: system
+        files: (.*py$)
+  - repo: local
+    hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        files: (.*py$)
+        args: [
+            "-rn", # Only display messages
+            "-sn", # Don't display the score
+            "--recursive=y",
+          ]
+  # - repo: local
+  #   hooks:
+  #     - id: pytest-check
+  #       name: pytest-check
+  #       entry: pytest
+  #       language: system
+  #       pass_filenames: false
+  #       always_run: true
+  #       args: ["tests/"]

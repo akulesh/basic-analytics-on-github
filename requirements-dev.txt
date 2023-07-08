@@ -8,8 +8,8 @@ pre-commit
 prefect
 pyarrow
 pylint
+pytest
 python-dotenv
-pyspark
 requests
 streamlit
 sqlalchemy
