@@ -1,5 +1,7 @@
 """
 Github API scrapping
+
+- https://docs.github.com/en/rest/overview/resources-in-the-rest-api?apiVersion=2022-11-28#rate-limiting
 """
 
 import argparse
@@ -21,7 +23,7 @@ SEARCH_ITEMS_LIMIT = 1000
 MAX_REQUESTS_PER_HOUR = 5000
 RATE_LIMITER_WINDOW = 3600
 TIMEOUT = 60
-PAGINATION_TIMEOUT = 0
+PAGINATION_TIMEOUT = 2
 RETRY_ATTEMPTS = 3
 MIN_STARS_COUNT = 1
 

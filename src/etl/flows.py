@@ -28,10 +28,12 @@ def extract(
     languages: str | list = None,
     overwrite_existed_files: bool = False,
     db_config: dict = None,
-    **kwargs,
+    min_stars_count: int = 1,
+    api_token: str = None,
 ):
     db = get_db_session(db_config)
-    extractor = RepoMetadataExtractor(output_dir=output_dir, db=db, **kwargs)
+    extractor = RepoMetadataExtractor(
+        output_dir=output_dir, min_stars_count=min_stars_count, api_token=api_token, db=db)
     extractor.run(
         start_date=start_date,
         end_date=end_date,
@@ -76,8 +78,7 @@ def run_etl(
     overwrite_existed_files: bool = False,
     min_stars_count: int = 1,
     api_token: str = None,
-    db_config: dict = None,
-    **kwargs,
+    db_config: dict = None
 ):
     languages = get_languages(languages)
     source_dir = os.path.join(source_dir, "repos")
@@ -93,7 +94,6 @@ def run_etl(
             min_stars_count=min_stars_count,
             api_token=api_token,
             db_config=db_config,
-            **kwargs,
         )
 
     transform_load(
