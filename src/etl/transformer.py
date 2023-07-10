@@ -98,6 +98,7 @@ class DataTransformer:
             "name",
             "owner",
             "language",
+            "lang_alias",
             "url",
             "topics",
             "archived",
@@ -163,7 +164,7 @@ class DataTransformer:
                 filename = os.path.join(input_dir, f"language={lang}", f"{date}.parquet")
                 if os.path.exists(filename):
                     data = self.process_file(filename)
-                    data.loc[:, "language"] = SUPPORTED_LANGUAGES.get(lang, lang)
+                    data.loc[:, "lang_alias"] = lang
                     self.update_tables(data, _mapping)
                 else:
                     logger.warning(f"File '{filename}' does not exist.")

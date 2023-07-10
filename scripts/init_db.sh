@@ -14,7 +14,8 @@ CREATE table ${POSTGRES_SCHEMA}.repo (
     id SERIAL,
     name VARCHAR(255),
     owner VARCHAR(255),
-    language VARCHAR(255),
+    language VARCHAR(25),
+    lang_alias VARCHAR(25),
     url VARCHAR(255),
     topics VARCHAR(255),
     archived SMALLINT DEFAULT 0,
@@ -40,8 +41,8 @@ CREATE table ${POSTGRES_SCHEMA}.repo (
 CREATE table ${POSTGRES_SCHEMA}.repo_topic (
     id SERIAL PRIMARY KEY,
     repo_id BIGINT,
+    language VARCHAR(25),
     topic VARCHAR(255),
-    language VARCHAR(255),
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -55,7 +56,7 @@ CREATE table ${POSTGRES_SCHEMA}.owner (
 
 CREATE table ${POSTGRES_SCHEMA}.repo_analytics (
     id SERIAL PRIMARY KEY,
-    language VARCHAR(255),
+    language VARCHAR(25),
     license VARCHAR(255),
     default_branch VARCHAR(255),
     creation_date TIMESTAMP,
@@ -81,7 +82,7 @@ CREATE table ${POSTGRES_SCHEMA}.repo_analytics (
 
 CREATE table ${POSTGRES_SCHEMA}.topic_analytics (
     id SERIAL PRIMARY KEY,
-    language VARCHAR(255),
+    language VARCHAR(25),
     topic VARCHAR(255),
     creation_date TIMESTAMP,
     last_commit_date TIMESTAMP,

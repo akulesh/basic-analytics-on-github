@@ -12,6 +12,7 @@ from glob import glob
 import pandas as pd
 from tqdm import tqdm
 
+import src.etl.extractors.constants as consts
 from src.utils.api import (
     SUPPORTED_LANGUAGES,
     get_headers,
@@ -23,14 +24,6 @@ from src.utils.logger import logger
 
 
 BASE_URL = "https://api.github.com/search/repositories"
-MAX_ITEMS_PER_PAGE = 100
-SEARCH_ITEMS_LIMIT = 1000
-MAX_REQUESTS_PER_HOUR = 5000
-RATE_LIMITER_WINDOW = 3600
-TIMEOUT = 60
-PAGINATION_TIMEOUT = 2
-RETRY_ATTEMPTS = 3
-MIN_STARS_COUNT = 1
 
 
 class RepoMetadataExtractor:
@@ -38,24 +31,24 @@ class RepoMetadataExtractor:
 
     def __init__(
         self,
-        output_dir: str = "./tmp/data/repos",
+        output_dir: str = "./tmp/data/repos/metadata",
         min_pushed_date: str = None,
-        retry_attempts: int = RETRY_ATTEMPTS,
-        timeout: int = TIMEOUT,
-        pagination_timeout: int = PAGINATION_TIMEOUT,
-        min_stars_count: int = MIN_STARS_COUNT,
-        max_requests_per_hour: int = MAX_REQUESTS_PER_HOUR,
+        retry_attempts: int = consts.RETRY_ATTEMPTS,
+        timeout: int = consts.TIMEOUT,
+        pagination_timeout: int = consts.PAGINATION_TIMEOUT,
+        min_stars_count: int = consts.MIN_STARS_COUNT,
+        max_requests_per_hour: int = consts.MAX_REQUESTS_PER_HOUR,
         sort_by: str = "stars",
         order_by: str = "desc",
         api_token: str = None,
         db: DBHandler = None,
     ):
         self.headers = get_headers(api_token)
-        self.output_dir = output_dir
+        self.output_dir = os.path.join(output_dir, "metadata")
         self.pagination_timeout = pagination_timeout
         self.timeout = timeout
         self.retry_attempts = retry_attempts
-        self.max_pages = SEARCH_ITEMS_LIMIT // MAX_ITEMS_PER_PAGE
+        self.max_pages = consts.SEARCH_ITEMS_LIMIT // consts.MAX_ITEMS_PER_PAGE
         self.max_requests_per_hour = max_requests_per_hour
         self.min_pushed_date = min_pushed_date
         self.min_stars_count = min_stars_count
@@ -83,7 +76,7 @@ class RepoMetadataExtractor:
             url += f"+language:{lang}"
 
         url += f"&sort={self.sort_by}&order={self.order_by}"
-        url += f"&per_page={MAX_ITEMS_PER_PAGE}"
+        url += f"&per_page={consts.MAX_ITEMS_PER_PAGE}"
         url += f"&page={page}"
 
         return url
@@ -113,7 +106,7 @@ class RepoMetadataExtractor:
         return time.time() - self._start
 
     def _update_request_counter(self):
-        if self._activity_period < RATE_LIMITER_WINDOW:
+        if self._activity_period < consts.RATE_LIMITER_WINDOW:
             self._request_counter += 1
         else:
             self._start = time.time()
@@ -126,7 +119,7 @@ class RepoMetadataExtractor:
             logger.info(f"Getting data from '{url}'")
 
             if self._request_counter >= self.max_requests_per_hour:
-                timeout = RATE_LIMITER_WINDOW - self._activity_period
+                timeout = consts.RATE_LIMITER_WINDOW - self._activity_period
                 logger.warning(f"Request limit exceeded. Timeout: {int(timeout)}")
                 while timeout > 0:
                     logger.warning(f"\tSleeping... {int(timeout)} seconds left.")
@@ -139,10 +132,10 @@ class RepoMetadataExtractor:
             )
 
             total_count = response.json()["total_count"]
-            if total_count > SEARCH_ITEMS_LIMIT:
+            if total_count > consts.SEARCH_ITEMS_LIMIT:
                 logger.warning(
                     f"The number of items in the search result ({total_count}) exceeds the limit"
-                    f" ({SEARCH_ITEMS_LIMIT})"
+                    f" ({consts.SEARCH_ITEMS_LIMIT})"
                 )
 
             items = response.json()["items"]
@@ -151,12 +144,12 @@ class RepoMetadataExtractor:
             time.sleep(self.pagination_timeout)
             self._update_request_counter()
 
-            if page >= self.max_pages or total_count < MAX_ITEMS_PER_PAGE or not items:
+            if page >= self.max_pages or total_count < consts.MAX_ITEMS_PER_PAGE or not items:
                 break
 
         return df
 
-    def extract_repos(self, created_at: str, languages: list, overwrite: bool = False, **kwargs):
+    def extract(self, created_at: str, languages: list, overwrite: bool = False, **kwargs):
         for language in languages:
             logger.info(f"🕐 Language: {language}")
             if language not in SUPPORTED_LANGUAGES:
@@ -198,7 +191,7 @@ class RepoMetadataExtractor:
         for created_at in dates:
             try:
                 logger.info(f"🔵 Created at: {created_at}")
-                self.extract_repos(created_at, languages=languages, **kwargs)
+                self.extract(created_at, languages=languages, **kwargs)
                 logger.info(
                     f"{self._request_counter} requests made during the last"
                     f" {int(self._activity_period)} seconds."
@@ -218,11 +211,12 @@ def main():
     parser.add_argument("--output_dir")
     parser.add_argument("--languages")
     parser.add_argument("--min_pushed_date", default="2020-01-01")
-    parser.add_argument("--min_stars_count", type=int, default=MIN_STARS_COUNT)
+    parser.add_argument("--min_stars_count", type=int, default=consts.MIN_STARS_COUNT)
     parser.add_argument("--api_token")
-    parser.add_argument("--pagination_timeout", type=int, default=PAGINATION_TIMEOUT)
-    parser.add_argument("--max_requests_per_hour", type=int, default=MAX_REQUESTS_PER_HOUR)
-    parser.add_argument("--retry_attempts", type=int, default=RETRY_ATTEMPTS)
+    parser.add_argument("--pagination_timeout", type=int, default=consts.PAGINATION_TIMEOUT)
+    parser.add_argument("--timeout", type=int, default=consts.TIMEOUT)
+    parser.add_argument("--max_requests_per_hour", type=int, default=consts.MAX_REQUESTS_PER_HOUR)
+    parser.add_argument("--retry_attempts", type=int, default=consts.RETRY_ATTEMPTS)
     parser.add_argument("--overwrite_existed_files", action="store_true")
 
     args = parser.parse_args()
@@ -231,6 +225,7 @@ def main():
     extractor = RepoMetadataExtractor(
         output_dir=args.output_dir,
         min_pushed_date=args.min_pushed_date,
+        timeout=args.timeout,
         pagination_timeout=args.pagination_timeout,
         max_requests_per_hour=args.max_requests_per_hour,
         min_stars_count=args.min_stars_count,

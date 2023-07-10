@@ -2,19 +2,23 @@
 Github API scrapping
 """
 
-# import argparse
-# from prefect import flow
+import argparse
 import os
+import time
 
 import pandas as pd
 from tqdm import tqdm
 
+import src.etl.extractors.constants as consts
 from src.utils.api import get_headers, make_safe_request
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
-SUPPORTED_LANGUAGES = ["Python", "Jupyter Notebook"]
+SUPPORTED_LANGUAGES = ["python", "jupyter-notebook"]
+DEFAULT_PATH_PATTERN = (
+    r"^readme.md$|^pyproject.toml$|requirements.*\.txt|pipfile|poetry|dockerfile|docker-compose"
+)
 
 
 class RepoStructureExtractor:
@@ -24,17 +28,21 @@ class RepoStructureExtractor:
         self,
         output_dir: str,
         api_token: str = None,
-        retry_attempts: int = 3,
-        timeout: int = 30,
-        languages: list = None,
+        min_stars_count: int = consts.MIN_STARS_COUNT,
+        retry_attempts: int = consts.RETRY_ATTEMPTS,
+        pagination_timeout: int = consts.PAGINATION_TIMEOUT,
+        timeout: int = consts.TIMEOUT,
+        db: DBHandler = None,
     ):
         self.headers = get_headers(api_token)
         self.retry_attempts = retry_attempts
+        self.pagination_timeout = pagination_timeout
         self.timeout = timeout
-        self.languages = languages or SUPPORTED_LANGUAGES
-        self.output_dir = output_dir
+        self.output_dir = os.path.join(output_dir, "structure")
+        self.min_stars_count = min_stars_count
+        self.db = db
 
-    def fetch_repo_structure(self, owner: str, repo: str, branch: str):
+    def fetch_repo_structure(self, owner: str, repo: str, branch: str, path_pattern: str = None):
         url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
         response = make_safe_request(
             url,
@@ -44,21 +52,22 @@ class RepoStructureExtractor:
         ).json()
 
         data = pd.DataFrame(response["tree"])
-        data["owner"] = owner
-        data["repo"] = repo
-        data["branch"] = branch
-        columns = ["owner", "repo", "branch", "path", "type", "url", "size"]
+        data = data[data["type"] == "blob"]
+        data["path"] = data["path"].str.lower()
 
-        return data[columns]
+        if path_pattern:
+            data = data[data["path"].str.contains(path_pattern)]
+
+        return data
 
     @staticmethod
     def select_repo_info(
         db, language: str, creation_date: str, min_stars: int = 1, limit: int = None
     ):
         q = f"""
-        SELECT owner, name AS repo, default_branch AS branch
+        SELECT id, owner, name AS repo, default_branch AS branch
         FROM github.repo
-        WHERE language = '{language}'
+        WHERE lang_alias = '{language}'
             AND creation_date = '{creation_date}'
             AND stars >= {min_stars}
         """
@@ -76,12 +85,11 @@ class RepoStructureExtractor:
         repo_df: pd.DataFrame,
         language: str,
         creation_date: str = None,
-        path_pattern: str = None,
-        overwrite_existed_files: bool = False,
+        path_pattern: str = DEFAULT_PATH_PATTERN,
+        overwrite: bool = False,
     ):
         filename = os.path.join(self.output_dir, f"language={language}", f"{creation_date}.parquet")
-        if not overwrite_existed_files and os.path.exists(filename):
-            logger.info(f"overwrite_existed_files: {overwrite_existed_files}")
+        if not overwrite and os.path.exists(filename):
             logger.info(f"File '{filename}' already exists!")
             return self.output_dir
 
@@ -91,14 +99,23 @@ class RepoStructureExtractor:
         output = []
         for _, row in tqdm(repo_df.iterrows(), total=n_rows):
             df = self.fetch_repo_structure(
-                owner=row["owner"], repo=row["repo"], branch=row["branch"]
+                owner=row["owner"],
+                repo=row["repo"],
+                branch=row["branch"],
+                path_pattern=path_pattern,
             )
+            if not df.empty:
+                df.loc[:, "repo_id"] = row["id"]
+                columns = ["repo_id", "path", "url", "size"]
+                df = df[columns]
+            else:
+                df = pd.DataFrame([{"repo_id": row["id"]}])
+
             output.append(df)
 
-        output = pd.concat(output)
-        if path_pattern:
-            output = output[output["path"].str.contains(path_pattern)]
+            time.sleep(self.pagination_timeout)
 
+        output = pd.concat(output)
         if not output.empty:
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             output.to_parquet(filename, index=False)
@@ -110,15 +127,16 @@ class RepoStructureExtractor:
 
     def run(
         self,
-        db: DBHandler,
         start_date: str,
         end_date: str = None,
-        min_stars: int = 1,
+        languages: list = None,
         limit: int = None,
         **kwargs,
     ):
-        end_date = end_date or start_date
+        languages = languages or SUPPORTED_LANGUAGES
+        languages = [lang for lang in languages if lang in SUPPORTED_LANGUAGES]
 
+        end_date = end_date or start_date
         if end_date < start_date:
             raise ValueError("'end_date' must be greater than 'start_date'")
 
@@ -127,10 +145,10 @@ class RepoStructureExtractor:
         for creation_date in dates:
             logger.info(f"Created date: '{creation_date}'")
 
-            for language in self.languages:
+            for language in languages:
                 logger.info(f"🕐 Language: {language}")
                 repo_df = self.select_repo_info(
-                    db, language, creation_date, min_stars=min_stars, limit=limit
+                    self.db, language, creation_date, min_stars=self.min_stars_count, limit=limit
                 )
                 if not repo_df.empty:
                     self.extract(repo_df, language, creation_date=creation_date, **kwargs)
@@ -138,65 +156,54 @@ class RepoStructureExtractor:
             logger.info(f"✅ Processing completed for 'creation_date={creation_date}'!")
 
 
-# @flow(
-#     name="repo-structure-extraction",
-#     flow_run_name="Repo Structure Extraction Flow",
-#     log_prints=True,
-# )
-# def extract_repo_structure(
-#     input_dir: str,
-#     output_dir: str,
-#     start_date: str = "2020-01-01",
-#     end_date: str = None,
-#     min_stars_count: int = 1,
-#     limit: int = None,
-#     path_pattern: str = None,
-#     overwrite_existed_files: bool = False,
-#     **kwargs,
-# ):
-#     extractor = RepoStructureExtractor(**kwargs)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start_date", default="2020-01-01")
+    parser.add_argument("--end_date", default="2020-01-01")
+    parser.add_argument("--output_dir")
+    parser.add_argument("--languages")
+    parser.add_argument("--min_stars_count", type=int, default=consts.MIN_STARS_COUNT)
+    parser.add_argument("--api_token")
+    parser.add_argument("--timeout", type=int, default=consts.TIMEOUT)
+    parser.add_argument("--pagination_timeout", type=int, default=consts.PAGINATION_TIMEOUT)
+    parser.add_argument("--retry_attempts", type=int, default=consts.RETRY_ATTEMPTS)
+    parser.add_argument("--overwrite_existed_files", action="store_true")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--db_username", default=None)
+    parser.add_argument("--db_password", default=None)
+    parser.add_argument("--db_host", default="0.0.0.0")
+    parser.add_argument("--db_port", type=int, default=5432)
+    parser.add_argument("--db_name", default="postgres")
 
-#     extractor.run(
-#         input_dir=input_dir,
-#         output_dir=output_dir,
-#         start_date=start_date,
-#         end_date=end_date,
-#         min_stars_count=min_stars_count,
-#         limit=limit,
-#         path_pattern=path_pattern,
-#         overwrite_existed_files=overwrite_existed_files,
-#     )
+    args = parser.parse_args()
+    logger.info(f"Args: {args}")
 
+    db = DBHandler(
+        db_username=args.db_username,
+        db_password=args.db_password,
+        db_host=args.db_host,
+        db_port=args.db_port,
+        db_name=args.db_name,
+        db_schema="github",
+    )
 
-# def main():
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("--input_dir")
-#     parser.add_argument("--output_dir")
-#     parser.add_argument("--path_pattern")
-#     parser.add_argument("--start_date", default="2020-01-01")
-#     parser.add_argument("--end_date", default=None)
-#     parser.add_argument("--languages", default=None)
-#     parser.add_argument("--min_stars_count", type=int, default=1)
-#     parser.add_argument("--limit", type=int, default=None)
-#     parser.add_argument("--api_token", default=None)
-#     parser.add_argument("--overwrite_existed_files", action="store_true")
+    extractor = RepoStructureExtractor(
+        output_dir=args.output_dir,
+        pagination_timeout=args.pagination_timeout,
+        timeout=args.timeout,
+        min_stars_count=args.min_stars_count,
+        api_token=args.api_token,
+        db=db,
+    )
 
-#     args = parser.parse_args()
-#     logger.info(f"Args: {args}")
-
-#     extract_repo_structure(
-#         start_date=args.start_date,
-#         end_date=args.end_date,
-#         input_dir=args.input_dir,
-#         output_dir=args.output_dir,
-#         languages=args.languages,
-#         min_stars_count=args.min_stars_count,
-#         path_pattern=args.path_pattern,
-#         limit=args.limit,
-#         api_token=args.api_token,
-#         overwrite_existed_files=args.overwrite_existed_files,
-#     )
+    extractor.run(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        languages=args.languages,
+        overwrite=args.overwrite_existed_files,
+        limit=args.limit,
+    )
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
