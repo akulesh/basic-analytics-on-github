@@ -1,42 +1,45 @@
 # GitHub Analytics
-## Tools
-- Docker
-- Docker Compose
-- Python
-- Prefect
-- Terraform
-- PostgreSQL
-- Pandas
-- Streamlit
+This repository contains a python application that offers global analytics of GitHub repositories. It utilizes  the GitHub RESTful API for data extraction and allows you to explore repository metrics and trends easily 🚀
 
+Link to the app: `TODO`
+
+The following languages are supported (primary repository language):
+- Python
+- Jupyter Notebook
+- HTML
+- Markdown
+- Shell
+- Java
+- JavaScript
+- TypeScript
+- C
+- C++
+- C#
+- Go
+- Rust
+
+
+The main components:
+- Docker (with Docker Compose) - containerization and easy deployment of the application
+- Prefect - data flow orchestration
+- Postgres - data storage
+- Pandas - data processing
+- Streamlit - the interactive dashboard interface
+- (Optional) Terraform - creating infrastructure on AWS
+
+# Quick start
 ## Docker
+Run from the repo root directory to fire up all components:
 ```
 docker-compose up --build
+```
 
-docker exec -it <CONTAINER_ID> <CMD>
-
+Stop the application:
+```
 docker-compose down --volumes
 ```
 
-## PostgreSQL
-```
-psql --username=postgres --dbname=postgres
-```
-
-## Virtual environment setup
-
-Install Miniconda:
-```
-FILE_NAME=Miniconda3-py310_23.1.0-1-Linux-x86_64.sh
-
-wget -P ./tmp https://repo.anaconda.com/miniconda/$FILE_NAME
-bash ./tmp/$FILE_NAME
-```
-
-Reference:
-- https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html
-
-
+## Conda dev environment
 Create a virtual environment:
 ```
 EVN_NAME=github
@@ -44,7 +47,7 @@ PYTHON_VERSION=3.10
 
 conda create -n $EVN_NAME python=$PYTHON_VERSION
 conda activate $EVN_NAME
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 Remove the virtual environment:
@@ -53,16 +56,7 @@ conda deactivate
 conda env remove --name=$EVN_NAME
 ```
 
-## Run ETL
-```
-PYTHONPATH=. python src/etl/main.py \
-    --skip_extraction
-```
-docker run --network=basic-analytics-on-github_prefect -it basic-analytics-on-github_etl bash
-prefect config set PREFECT_API_URL=http://server:4200/api
-PYTHONPATH=. python src/etl/deploy.py
-
-## Run Dashboard
+### Run Dashboard
 ```
 source .env
 export POSTGRES_HOST=0.0.0.0
@@ -82,3 +76,6 @@ PYTHONPATH=. streamlit run src/dashboard/app.py
 - https://docs.prefect.io/2.10.16/concepts/deployments/
 - https://gist.github.com/rxaviers/7360908
 - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-using-volumes.html
+- Pre-commit hooks: https://pre-commit.com/
+- Hooks: https://pre-commit.com/hooks.html
+- Black: https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html
