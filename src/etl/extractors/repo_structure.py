@@ -98,18 +98,24 @@ class RepoStructureExtractor:
 
         output = []
         for _, row in tqdm(repo_df.iterrows(), total=n_rows):
-            df = self.fetch_repo_structure(
-                owner=row["owner"],
-                repo=row["repo"],
-                branch=row["branch"],
-                path_pattern=path_pattern,
-            )
+            try:
+                df = self.fetch_repo_structure(
+                    owner=row["owner"],
+                    repo=row["repo"],
+                    branch=row["branch"],
+                    path_pattern=path_pattern,
+                )
+                is_failed = False
+            except Exception:
+                is_failed = True
+                df = pd.DataFrame()
+
             if not df.empty:
                 df.loc[:, "repo_id"] = row["id"]
                 columns = ["repo_id", "path", "url", "size"]
                 df = df[columns]
             else:
-                df = pd.DataFrame([{"repo_id": row["id"]}])
+                df = pd.DataFrame([{"repo_id": row["id"], "is_failed": is_failed}])
 
             output.append(df)
 
