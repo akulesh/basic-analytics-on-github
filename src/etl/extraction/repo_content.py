@@ -29,6 +29,7 @@ class RepoContentExtractor:
         self.timeout = timeout
         self.pagination_timeout = pagination_timeout
 
+    # TODO: add authorization error handling
     def fetch_content(self, url: str, repo_id: str = None, path: str = None) -> dict:
         content = None
         try:
@@ -117,6 +118,10 @@ class RepoContentExtractor:
                     url_df = pd.read_parquet(filename)
                 except FileNotFoundError:
                     logger.warning(f"File {filename} is not found!")
+                    continue
+
+                # FIXME
+                if "path" not in url_df.columns:
                     continue
 
                 for key in path_pattern:
