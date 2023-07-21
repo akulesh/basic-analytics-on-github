@@ -114,7 +114,8 @@ class DataAggregator:
             date_col="updated_at",
         )
 
-    def run(self, start_date: str, end_date: str):
+    def run(self, start_date: str, end_date: str = None):
+        end_date = end_date or start_date
         logger.info("Updating 'topic_analytics' table...")
         self.update_topic_analytics_table(start_date, end_date)
         logger.info("✅ Table has been updated!")

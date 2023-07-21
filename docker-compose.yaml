@@ -39,7 +39,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: ./src/Dockerfile.prefect
+      dockerfile: ./src/etl/Dockerfile.server
     container_name: prefect-server
     restart: always
     healthcheck:
@@ -50,7 +50,6 @@ services:
       start_period: 10s
     entrypoint: [ "prefect", "server", "start" ]
     environment:
-      # - PREFECT_ORION_API_HOST=0.0.0.0
       - PREFECT_SERVER_API_HOST=0.0.0.0
       - PREFECT_SERVER_API_PORT=${PREFECT_SERVER_API_PORT:-4200}
       - PREFECT_ORION_DATABASE_CONNECTION_URL=${PREFECT_DB_CONNECTION_URL}
@@ -67,7 +66,7 @@ services:
   etl:
     build:
       context: .
-      dockerfile: ./src/etl/Dockerfile
+      dockerfile: ./src/etl/Dockerfile.worker
     container_name: etl-pipeline
     restart: always
     environment:

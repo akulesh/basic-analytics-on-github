@@ -9,16 +9,13 @@ import time
 import pandas as pd
 from tqdm import tqdm
 
-import src.etl.extractors.constants as consts
-from src.utils.api import get_headers, make_safe_request
+import src.etl.extraction.constants as consts
+from src.utils.api import get_date_range, get_headers, make_safe_request
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
 SUPPORTED_LANGUAGES = ["python", "jupyter-notebook"]
-DEFAULT_PATH_PATTERN = (
-    r"^readme.md$|^pyproject.toml$|requirements.*\.txt|pipfile|poetry|dockerfile|docker-compose"
-)
 
 
 class RepoStructureExtractor:
@@ -26,9 +23,7 @@ class RepoStructureExtractor:
 
     def __init__(
         self,
-        output_dir: str,
         api_token: str = None,
-        min_stars_count: int = consts.MIN_STARS_COUNT,
         retry_attempts: int = consts.RETRY_ATTEMPTS,
         pagination_timeout: int = consts.PAGINATION_TIMEOUT,
         timeout: int = consts.TIMEOUT,
@@ -38,20 +33,46 @@ class RepoStructureExtractor:
         self.retry_attempts = retry_attempts
         self.pagination_timeout = pagination_timeout
         self.timeout = timeout
-        self.output_dir = os.path.join(output_dir, "structure")
-        self.min_stars_count = min_stars_count
         self.db = db
 
-    def fetch_repo_structure(self, owner: str, repo: str, branch: str, path_pattern: str = None):
-        url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    def get_branch(self, owner: str, repo: str):
+        url = f"https://api.github.com/repos/{owner}/{repo}"
         response = make_safe_request(
             url,
             headers=self.headers,
             retry_attempts=self.retry_attempts,
             timeout=self.timeout,
-        ).json()
+        )
 
-        data = pd.DataFrame(response["tree"])
+        return None if response.status_code != 200 else response.json()["default_branch"]
+
+    def fetch_repo_structure(
+        self, owner: str, repo: str, branch: str, path_pattern: str = None
+    ) -> pd.DataFrame:
+        while True:
+            url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+            response = make_safe_request(
+                url,
+                headers=self.headers,
+                retry_attempts=self.retry_attempts,
+                timeout=self.timeout,
+            )
+
+            if response.status_code == 200:
+                break
+
+            if response.status_code == 404:
+                logger.warning("Not Found error. Getting repository default branch...")
+                branch = self.get_branch(owner, repo)
+
+                if not branch:
+                    break
+
+            else:
+                break
+
+        content = response.json()
+        data = pd.DataFrame(content["tree"])
         data = data[data["type"] == "blob"]
         data["path"] = data["path"].str.lower()
 
@@ -63,7 +84,7 @@ class RepoStructureExtractor:
     @staticmethod
     def select_repo_info(
         db, language: str, creation_date: str, min_stars: int = 1, limit: int = None
-    ):
+    ) -> pd.DataFrame:
         q = f"""
         SELECT id, owner, name AS repo, default_branch AS branch
         FROM github.repo
@@ -83,18 +104,16 @@ class RepoStructureExtractor:
     def extract(
         self,
         repo_df: pd.DataFrame,
-        language: str,
-        creation_date: str = None,
-        path_pattern: str = DEFAULT_PATH_PATTERN,
+        filename: str,
+        path_pattern: str = None,
         overwrite: bool = False,
-    ):
-        filename = os.path.join(self.output_dir, f"language={language}", f"{creation_date}.parquet")
+    ) -> pd.DataFrame:
         if not overwrite and os.path.exists(filename):
             logger.info(f"File '{filename}' already exists!")
-            return self.output_dir
+            return filename
 
         n_rows, n_cols = repo_df.shape
-        logger.info(f"Repo data shape: {n_rows, n_cols}")
+        logger.info(f"Input data shape: {n_rows, n_cols}")
 
         output = []
         for _, row in tqdm(repo_df.iterrows(), total=n_rows):
@@ -105,59 +124,66 @@ class RepoStructureExtractor:
                     branch=row["branch"],
                     path_pattern=path_pattern,
                 )
-                is_failed = False
             except Exception:
-                is_failed = True
                 df = pd.DataFrame()
 
             if not df.empty:
                 df.loc[:, "repo_id"] = row["id"]
-                columns = ["repo_id", "path", "url", "size"]
+                columns = ["repo_id", "path", "url"]
                 df = df[columns]
             else:
-                df = pd.DataFrame([{"repo_id": row["id"], "is_failed": is_failed}])
+                df = pd.DataFrame([{"repo_id": row["id"]}])
 
             output.append(df)
 
             time.sleep(self.pagination_timeout)
 
-        output = pd.concat(output)
-        if not output.empty:
+        data = pd.concat(output)
+        if not data.empty:
             os.makedirs(os.path.dirname(filename), exist_ok=True)
-            output.to_parquet(filename, index=False)
-            logger.info("Data has been extracted and saved!")
+            data.to_parquet(filename, index=False)
+            logger.info(f"Data has been extracted and saved! Filename: '{filename}'")
         else:
             logger.info("The output is empty!")
 
-        return self.output_dir
+        return data
 
     def run(
         self,
+        output_dir: str,
         start_date: str,
         end_date: str = None,
         languages: list = None,
+        min_stars_count: int = consts.MIN_STARS_COUNT,
         limit: int = None,
         **kwargs,
     ):
         languages = languages or SUPPORTED_LANGUAGES
+
+        if isinstance(languages, str):
+            languages = [languages]
+
         languages = [lang for lang in languages if lang in SUPPORTED_LANGUAGES]
+        if not languages:
+            raise ValueError("No valid languages were specified")
 
-        end_date = end_date or start_date
-        if end_date < start_date:
-            raise ValueError("'end_date' must be greater than 'start_date'")
-
-        dates = pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
+        dates = get_date_range(start_date, end_date)
 
         for creation_date in dates:
-            logger.info(f"Created date: '{creation_date}'")
+            logger.info(f"🕐 Created date: '{creation_date}'")
 
             for language in languages:
-                logger.info(f"🕐 Language: {language}")
+                logger.info(f"🖲 Language: {language}")
                 repo_df = self.select_repo_info(
-                    self.db, language, creation_date, min_stars=self.min_stars_count, limit=limit
+                    self.db, language, creation_date, min_stars=min_stars_count, limit=limit
                 )
                 if not repo_df.empty:
-                    self.extract(repo_df, language, creation_date=creation_date, **kwargs)
+                    filename = os.path.join(
+                        output_dir, f"language={language}", f"{creation_date}.parquet"
+                    )
+                    self.extract(repo_df, filename, **kwargs)
+                else:
+                    logger.warning("There are no repositories in the database for specified date")
 
             logger.info(f"✅ Processing completed for 'creation_date={creation_date}'!")
 
@@ -194,18 +220,19 @@ def main():
     )
 
     extractor = RepoStructureExtractor(
-        output_dir=args.output_dir,
         pagination_timeout=args.pagination_timeout,
         timeout=args.timeout,
-        min_stars_count=args.min_stars_count,
+        retry_attempts=args.retry_attempts,
         api_token=args.api_token,
         db=db,
     )
 
     extractor.run(
+        output_dir=args.output_dir,
         start_date=args.start_date,
         end_date=args.end_date,
         languages=args.languages,
+        min_stars_count=args.min_stars_count,
         overwrite=args.overwrite_existed_files,
         limit=args.limit,
     )

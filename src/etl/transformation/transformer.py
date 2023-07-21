@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 from tqdm import tqdm
 
-from src.etl.aggregator import DataAggregator
+from src.etl.transformation.aggregator import DataAggregator
 from src.utils.api import SUPPORTED_LANGUAGES
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
@@ -180,7 +180,6 @@ def main():
     parser.add_argument("--input_dir")
     parser.add_argument("--start_date")
     parser.add_argument("--end_date")
-    parser.add_argument("--input_dir")
     parser.add_argument("--languages", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--db_username", default=None)

@@ -13,6 +13,11 @@ from sqlalchemy import create_engine, text
 from src.utils.logger import logger
 
 
+def get_db_handler(db_config: dict = None):
+    db_config = db_config or {}
+    return DBHandler(**db_config)
+
+
 def create_db_session(
     db_username: str = None,
     db_password: str = None,

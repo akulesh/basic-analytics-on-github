@@ -6,7 +6,7 @@ skip = [".gitignore", ".dockerignore"]
 
 [tool.black]
 line-length = 100
-# experimental-string-processing = true
+experimental-string-processing = true
 preview = true
 
 [tool.pylint.message_control]
@@ -19,6 +19,7 @@ disable = [
     "suppressed-message",
     "useless-suppression",
     "deprecated-pragma",
+    "duplicate-code",
     "use-symbolic-message-instead",
     "import-error",
     "missing-function-docstring",
