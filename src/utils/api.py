@@ -54,7 +54,12 @@ def get_headers(api_token=None):
 
 
 def decode_content(content):
-    return base64.b64decode(content).decode("utf-8")
+    try:
+        text = base64.b64decode(content).decode("utf-8")
+    except UnicodeDecodeError:
+        text = None
+
+    return text
 
 
 def get_languages(values: list | str = None) -> list:

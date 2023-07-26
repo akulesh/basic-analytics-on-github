@@ -153,6 +153,7 @@ def extract_repo_content(
     path_pattern: str,
     start_date: str = "2020-01-01",
     end_date: str = None,
+    languages: list = None,
     limit: int = None,
     overwrite_existed_files: bool = False,
     **kwargs,
@@ -165,6 +166,7 @@ def extract_repo_content(
         path_pattern=path_pattern,
         start_date=start_date,
         end_date=end_date,
+        languages=languages,
         limit=limit,
         overwrite_existed_files=overwrite_existed_files,
     )
@@ -209,6 +211,7 @@ def run_repo_content_flow(
             path_pattern=content_path_pattern,
             start_date=start_date,
             end_date=end_date,
+            languages=languages,
             overwrite_existed_files=overwrite_existed_files,
             **kwargs,
         )
