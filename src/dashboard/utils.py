@@ -62,6 +62,7 @@ def add_multiselect(
     options: list,
     entity: str = "topic",
     default=None,
+    title: str = None,
     add_reset_button: bool = False,
     reset_button_name="Reset",
     exclude_empty: bool = False,
@@ -73,7 +74,7 @@ def add_multiselect(
 
     values = (
         f.multiselect(
-            f"Select the {entity.capitalize()}",
+            title or f"Select the {entity.capitalize()}",
             options,
             default=default,
             key=f"{entity}_multiselect",
@@ -152,3 +153,23 @@ def plot_wordcloud(word_freq: dict, title=None, **kwargs):
         st.markdown(f"##### {title}")
         st.markdown("#")
     st.pyplot(fig, use_container_width=True)
+
+
+@st.cache_data
+def get_last_updated_date():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def clear_cache():
+    cols = st.columns(3)
+
+    st.markdown("---")
+
+    with cols[0]:
+        updated_at = get_last_updated_date()
+        st.markdown(f"*Last cache update*: `{updated_at}`")
+
+    with cols[0]:
+        if st.button("Clear Cache"):
+            st.cache_resource.clear()
+            st.cache_data.clear()

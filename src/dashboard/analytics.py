@@ -95,7 +95,7 @@ class DataAnalytics:
 
         return self.db.read_sql(query)
 
-    def get_topics_data(self):
+    def get_topics_data(self, min_repos: int = 1):
         query = f"""
         SELECT
             "language",
@@ -103,10 +103,35 @@ class DataAnalytics:
             SUM(n_repos) AS n_repos
         FROM {self.schema}.topic_analytics AS ta
         GROUP BY "language", topic
-        ORDER BY n_repos DESC;
+        HAVING SUM(n_repos) >= {min_repos}
+        ORDER BY n_repos DESC
         """
 
         return self.db.read_sql(query)
+
+    def get_packages_data(self):
+        query = f"""
+        SELECT
+            "language",
+            package,
+            COUNT(*) AS freq
+        FROM {self.schema}.package AS ta
+        GROUP BY "language", package
+        ORDER BY freq DESC
+        """
+
+        return self.db.read_sql(query)
+
+    def get_repos_with_packages(self, packages: tuple):
+        query = f"""
+        SELECT repo_id FROM {self.schema}.package
+        WHERE package IN {self._fix_values(packages)}
+        GROUP BY repo_id
+        HAVING COUNT(*) = {len(packages)}
+        """
+
+        df = self.db.read_sql(query)
+        return set() if df.empty else set(df.repo_id)
 
     def get_repo_analytics_data(
         self, creation_date_range=None, last_commit_date_range=None, languages=None
@@ -145,7 +170,7 @@ class DataAnalytics:
 
         return self.db.read_sql(query)
 
-    def get_kpi_report(self, repos_df: pd.DataFrame) -> dict:
+    def get_kpi_report(self, repos_df: pd.DataFrame, topics_df: pd.DataFrame) -> dict:
         data = repos_df.agg(
             {
                 "n_repos": sum,
@@ -158,7 +183,10 @@ class DataAnalytics:
             }
         )
 
-        return data.to_dict()
+        output = data.to_dict()
+        output["topics"] = topics_df["topic"].nunique()
+
+        return output
 
     def get_repo_report(
         self,
@@ -167,6 +195,7 @@ class DataAnalytics:
         languages: list = None,
         topics: list = None,
         licenses: list = None,
+        packages: list = None,
         sort_by: str = "stars",
         exclude_archived: bool = False,
         exclude_without_wiki: bool = False,
@@ -175,17 +204,18 @@ class DataAnalytics:
         limit=None,
     ):
         query = f"""
-        SELECT DISTINCT r."name",
+        SELECT DISTINCT r.id AS repo_id,
+            r."name",
+            r.url,
             r."language",
             r.stars,
             r.forks,
             r.open_issues,
             r.archived,
             r.has_wiki,
-            r.topics,
             r.description,
-            r.url,
             r.license,
+            r.topics,
             r."owner",
             r.days_since_creation,
             r.days_since_last_commit,
@@ -209,7 +239,6 @@ class DataAnalytics:
         topic_conditions = self._get_conditions(
             table="rt", topics=topics, exclude_without_topic=exclude_without_topic
         )
-
         conditions.extend(topic_conditions)
 
         if conditions:
@@ -222,6 +251,12 @@ class DataAnalytics:
 
         data = self.db.read_sql(query)
         data["topics"] = data["topics"].replace("", "__NA__").str.split("|")
+
+        if packages:
+            repos_with_packages = self.get_repos_with_packages(packages)
+            data = data[data["repo_id"].isin(repos_with_packages)]
+
+        del data["repo_id"]
 
         return data
 
