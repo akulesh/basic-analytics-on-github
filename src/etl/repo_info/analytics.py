@@ -4,7 +4,7 @@ from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
-class DataAggregator:
+class RepoInfoAnalytics:
     """Aggregate data and create tables for analytics"""
 
     def __init__(self, db: DBHandler):

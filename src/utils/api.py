@@ -75,7 +75,7 @@ def get_languages(values: list | str = None) -> list:
     return values
 
 
-def get_date(shift=0):
+def get_current_date(shift=0):
     current_date = datetime.now().date()
     previous_date = current_date - timedelta(days=shift)
     return previous_date.strftime("%Y-%m-%d")
@@ -84,6 +84,11 @@ def get_date(shift=0):
 def get_date_range(start_date: str, end_date: str = None):
     end_date = end_date or start_date
     if end_date < start_date:
-        raise ValueError("'end_date' must be greater than 'start_date'")
+        raise ValueError("'end_date' must be >= than 'start_date'")
 
     return pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
+
+
+def get_languages_from_path(path: str):
+    values = [x.split("=")[-1] for x in os.listdir(path)]
+    return [x for x in values if x in SUPPORTED_LANGUAGES]

@@ -6,18 +6,17 @@ from datetime import datetime
 import pandas as pd
 from tqdm import tqdm
 
-from src.etl.transformation.aggregator import DataAggregator
-from src.utils.api import SUPPORTED_LANGUAGES
+from src.etl.repo_info.analytics import RepoInfoAnalytics
+from src.utils.api import SUPPORTED_LANGUAGES, get_date_range, get_languages_from_path
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
 
 
-class DataTransformer:
+class RepoInfoTransformer:
     """Transform raw data and upload into database"""
 
-    def __init__(self, db: DBHandler):
-        self.db = db
-        self.schema = db.schema
+    def __init__(self):
+        pass
 
     @staticmethod
     def process_file(filename):
@@ -135,28 +134,32 @@ class DataTransformer:
 
         return data
 
-    def update_tables(self, data: pd.DataFrame, mapping: dict):
-        for table, func in mapping.items():
-            df = func(data)
-            self.db.update_table(df, table=table)
-
-    @staticmethod
-    def get_languages_from_path(path: str):
-        values = [x.split("=")[-1] for x in os.listdir(path)]
-        return [x for x in values if x in SUPPORTED_LANGUAGES]
-
-    def run(self, input_dir: str, start_date: str, end_date: str = None, languages: list = None):
-        mapping = {
+    @property
+    def tables_mapping(self):
+        return {
             "repo": {"get_table": self.get_repo_table, "key_columns": ["id"]},
             "repo_topic": {"get_table": self.get_topic_table, "key_columns": ["repo_id", "topic"]},
             "owner": {"get_table": self.get_owner_table, "key_columns": ["url"]},
         }
-        _mapping = {table: val["get_table"] for table, val in mapping.items()}
 
-        end_date = end_date or start_date
-        dates = pd.date_range(start=start_date, end=end_date, freq="D").strftime("%Y-%m-%d")
+    def update_tables(self, db: DBHandler, data: pd.DataFrame):
+        mapping = {table: val["get_table"] for table, val in self.tables_mapping.items()}
 
-        languages = languages or self.get_languages_from_path(input_dir)
+        for table, func in mapping.items():
+            df = func(data)
+            db.update_table(df, table=table)
+
+    def run(
+        self,
+        db: DBHandler,
+        input_dir: str,
+        start_date: str,
+        end_date: str = None,
+        languages: list = None,
+    ):
+        dates = get_date_range(start_date, end_date)
+
+        languages = languages or get_languages_from_path(input_dir)
         for lang in languages:
             logger.info(f"🕐 Language: {lang}")
 
@@ -165,14 +168,18 @@ class DataTransformer:
                 if os.path.exists(filename):
                     data = self.process_file(filename)
                     data.loc[:, "lang_alias"] = lang
-                    self.update_tables(data, _mapping)
+                    data["language"] = data["language"].fillna(SUPPORTED_LANGUAGES[lang])
+                    self.update_tables(db=db, data=data)
                 else:
                     logger.warning(f"File '{filename}' does not exist.")
 
             logger.info(f"✅ Processing completed for '{lang}'!")
 
-        for table, val in mapping.items():
-            self.db.drop_duplicates(table=table, key_columns=val["key_columns"])
+        for table, val in self.tables_mapping.items():
+            db.drop_duplicates(table=table, key_columns=val["key_columns"])
+
+        analytics = RepoInfoAnalytics(db)
+        analytics.run(start_date, end_date)
 
 
 def main():
@@ -200,16 +207,14 @@ def main():
         db_schema="github",
     )
 
-    transformer = DataTransformer(db)
+    transformer = RepoInfoTransformer()
     transformer.run(
+        db=db,
         input_dir=args.input_dir,
         start_date=args.start_date,
         end_date=args.end_date,
         languages=args.languages,
     )
-
-    aggregator = DataAggregator(db)
-    aggregator.run(args.start_date, args.end_date)
 
     time.sleep(1)
     stats = db.get_table_stats()

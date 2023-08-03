@@ -9,7 +9,7 @@ import time
 import pandas as pd
 from tqdm import tqdm
 
-import src.etl.extraction.constants as consts
+import src.etl.constants as consts
 from src.utils.api import get_date_range, get_headers, make_safe_request
 from src.utils.logger import logger
 
@@ -80,8 +80,8 @@ class RepoContentExtractor:
 
         data = pd.DataFrame(output)
         if data.empty:
-            data = pd.DataFrame(url_df["repo_id"].drop_duplicates())
             logger.info("The extracted data is empty!")
+            return data
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         data.to_parquet(filename, index=False)

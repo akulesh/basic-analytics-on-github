@@ -1,28 +1,27 @@
 import os
 import time
 
-from prefect import flow
+from prefect import flow, task
 
-import src.etl.extraction.constants as consts
-from src.etl.extraction import (
+import src.etl.constants as consts
+from src.etl.repo_content import (
+    PythonPackagesExtractor,
     RepoContentExtractor,
-    RepoInfoExtractor,
     RepoStructureExtractor,
 )
-from src.etl.transformation.aggregator import DataAggregator
-from src.etl.transformation.transformer import DataTransformer
-from src.utils.api import get_languages
+from src.etl.repo_info import RepoInfoExtractor, RepoInfoTransformer
+from src.utils.api import get_current_date, get_languages
 from src.utils.db_handler import get_db_handler
 
 
-@flow(
+@task(
     name="repo-info-extraction",
-    flow_run_name="Info extraction subflow",
+    task_run_name="Repo info extraction task",
     log_prints=True,
 )
 def extract_repo_info(
     output_dir: str,
-    start_date: str = "2020-01-01",
+    start_date: str,
     end_date: str = None,
     languages: str | list = None,
     overwrite_existed_files: bool = False,
@@ -43,12 +42,12 @@ def extract_repo_info(
     )
 
 
-@flow(
+@task(
     name="repo-info-transformation",
-    flow_run_name="Transformation subflow",
+    task_run_name="Repo info transformation task",
     log_prints=True,
 )
-def transform_load(
+def transform_load_repo_info(
     input_dir: str,
     start_date: str,
     end_date: str = None,
@@ -56,13 +55,10 @@ def transform_load(
     db_config: dict = None,
 ):
     db = get_db_handler(db_config)
-    transformer = DataTransformer(db)
+    transformer = RepoInfoTransformer()
     transformer.run(
-        input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
+        db=db, input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
     )
-
-    aggregator = DataAggregator(db)
-    aggregator.run(start_date, end_date)
 
     time.sleep(1)
     stats = db.get_table_stats()
@@ -72,8 +68,8 @@ def transform_load(
 @flow(name="etl-repo-info-flow", flow_run_name="ETL: Repo info flow", log_prints=True)
 def run_repo_info_flow(
     source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/volumes/data"),
-    start_date: str = "2020-01-01",
-    end_date: str = "2020-01-01",
+    start_date: str = None,
+    end_date: str = None,
     languages: str | list = None,
     extract: bool = True,
     transform: bool = True,
@@ -87,6 +83,7 @@ def run_repo_info_flow(
     source_dir = os.path.join(source_dir, "repos")
     print(f"Source directory: {source_dir}")
 
+    start_date = start_date or get_current_date()
     if extract:
         extract_repo_info(
             output_dir=os.path.join(source_dir, "info"),
@@ -101,7 +98,7 @@ def run_repo_info_flow(
         )
 
     if transform:
-        transform_load(
+        transform_load_repo_info(
             input_dir=os.path.join(source_dir, "info"),
             start_date=start_date,
             end_date=end_date,
@@ -110,14 +107,14 @@ def run_repo_info_flow(
         )
 
 
-@flow(
+@task(
     name="repo-structure-extraction",
-    flow_run_name="Structure extraction subflow",
+    task_run_name="Structure extraction task",
     log_prints=True,
 )
 def extract_repo_structure(
     output_dir: str,
-    start_date: str = "2020-01-01",
+    start_date: str,
     end_date: str = None,
     languages: str | list = None,
     min_stars_count: int = 1,
@@ -128,9 +125,10 @@ def extract_repo_structure(
     **kwargs,
 ):
     db = get_db_handler(db_config)
-    extractor = RepoStructureExtractor(db=db, **kwargs)
+    extractor = RepoStructureExtractor(**kwargs)
 
     extractor.run(
+        db=db,
         output_dir=output_dir,
         start_date=start_date,
         end_date=end_date,
@@ -142,16 +140,16 @@ def extract_repo_structure(
     )
 
 
-@flow(
+@task(
     name="repo-content-extraction",
-    flow_run_name="Content extraction subflow",
+    task_run_name="Content extraction task",
     log_prints=True,
 )
 def extract_repo_content(
     input_dir: str,
     output_dir: str,
     path_pattern: str,
-    start_date: str = "2020-01-01",
+    start_date: str = None,
     end_date: str = None,
     languages: list = None,
     limit: int = None,
@@ -172,14 +170,35 @@ def extract_repo_content(
     )
 
 
+@task(
+    name="python-packages-extraction",
+    task_run_name="Python packages extraction task",
+    log_prints=True,
+)
+def extract_py_packages(
+    input_dir: str,
+    start_date: str,
+    end_date: str = None,
+    languages: list = None,
+    db_config: dict = None,
+):
+    extractor = PythonPackagesExtractor()
+    db = get_db_handler(db_config)
+
+    extractor.run(
+        db=db, input_dir=input_dir, start_date=start_date, end_date=end_date, languages=languages
+    )
+
+
 @flow(name="etl-repo-content-flow", flow_run_name="ETL: Repo content flow", log_prints=True)
 def run_repo_content_flow(
     source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/volumes/data"),
-    start_date: str = "2020-01-01",
-    end_date: str = "2020-01-01",
+    start_date: str = None,
+    end_date: str = None,
     languages: str | list = "python",
-    extract_structure: bool = True,
-    extract_content: bool = True,
+    run_extract_structure_task: bool = True,
+    run_extract_content_task: bool = True,
+    run_extract_py_packages_task: bool = True,
     overwrite_existed_files: bool = False,
     min_stars_count: int = 10,
     structure_path_pattern: str = consts.FULL_PATH_PATTERN,
@@ -187,11 +206,11 @@ def run_repo_content_flow(
     db_config: dict = None,
     **kwargs,
 ):
-    languages = get_languages(languages)
     source_dir = os.path.join(source_dir, "repos")
     print(f"Source directory: {source_dir}")
 
-    if extract_structure:
+    start_date = start_date or get_current_date()
+    if run_extract_structure_task:
         extract_repo_structure(
             output_dir=os.path.join(source_dir, "structure"),
             start_date=start_date,
@@ -204,7 +223,7 @@ def run_repo_content_flow(
             **kwargs,
         )
 
-    if extract_content:
+    if run_extract_content_task:
         extract_repo_content(
             input_dir=os.path.join(source_dir, "structure"),
             output_dir=os.path.join(source_dir, "content"),
@@ -213,5 +232,54 @@ def run_repo_content_flow(
             end_date=end_date,
             languages=languages,
             overwrite_existed_files=overwrite_existed_files,
+            **kwargs,
+        )
+
+    if run_extract_py_packages_task:
+        extract_py_packages(
+            input_dir=os.path.join(source_dir, "content"),
+            start_date=start_date,
+            end_date=end_date,
+            languages=languages,
+            db_config=db_config,
+        )
+
+
+@flow(name="etl-flow", flow_run_name="ETL flow", log_prints=True)
+def run_etl_flow(
+    source_dir: str = os.getenv("DOCKER_PATH_RAW_DATA", "/volumes/data"),
+    start_date: str = None,
+    end_date: str = None,
+    n_last_days: int = 0,
+    run_info_flow: bool = True,
+    run_contents_flow: bool = True,
+    languages: str | list = None,
+    info_flow_config: dict = None,
+    content_flow_config: dict = None,
+    **kwargs,
+):
+    start_date = start_date or get_current_date(n_last_days)
+    end_date = end_date or get_current_date()
+    languages = get_languages(languages)
+
+    if run_info_flow:
+        info_flow_config = info_flow_config or {}
+        run_repo_info_flow(
+            source_dir,
+            start_date=start_date,
+            end_date=end_date,
+            languages=languages,
+            **info_flow_config,
+            **kwargs,
+        )
+
+    if run_contents_flow:
+        content_flow_config = content_flow_config or {}
+        run_repo_content_flow(
+            source_dir,
+            start_date=start_date,
+            end_date=end_date,
+            languages=languages,
+            **content_flow_config,
             **kwargs,
         )

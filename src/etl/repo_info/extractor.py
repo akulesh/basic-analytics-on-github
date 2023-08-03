@@ -12,7 +12,7 @@ from glob import glob
 import pandas as pd
 from tqdm import tqdm
 
-import src.etl.extraction.constants as consts
+import src.etl.constants as consts
 from src.utils.api import (
     SUPPORTED_LANGUAGES,
     get_date_range,

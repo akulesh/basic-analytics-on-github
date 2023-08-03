@@ -9,7 +9,7 @@ import time
 import pandas as pd
 from tqdm import tqdm
 
-import src.etl.extraction.constants as consts
+import src.etl.constants as consts
 from src.utils.api import get_date_range, get_headers, make_safe_request
 from src.utils.db_handler import DBHandler
 from src.utils.logger import logger
@@ -27,13 +27,11 @@ class RepoStructureExtractor:
         retry_attempts: int = consts.RETRY_ATTEMPTS,
         pagination_timeout: int = consts.PAGINATION_TIMEOUT,
         timeout: int = consts.TIMEOUT,
-        db: DBHandler = None,
     ):
         self.headers = get_headers(api_token)
         self.retry_attempts = retry_attempts
         self.pagination_timeout = pagination_timeout
         self.timeout = timeout
-        self.db = db
 
     def get_branch(self, owner: str, repo: str):
         url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -150,6 +148,7 @@ class RepoStructureExtractor:
 
     def run(
         self,
+        db: DBHandler,
         output_dir: str,
         start_date: str,
         end_date: str = None,
@@ -175,7 +174,7 @@ class RepoStructureExtractor:
             for language in languages:
                 logger.info(f"🖲 Language: {language}")
                 repo_df = self.select_repo_info(
-                    self.db, language, creation_date, min_stars=min_stars_count, limit=limit
+                    db, language, creation_date, min_stars=min_stars_count, limit=limit
                 )
                 if not repo_df.empty:
                     filename = os.path.join(
@@ -224,10 +223,10 @@ def main():
         timeout=args.timeout,
         retry_attempts=args.retry_attempts,
         api_token=args.api_token,
-        db=db,
     )
 
     extractor.run(
+        db=db,
         output_dir=args.output_dir,
         start_date=args.start_date,
         end_date=args.end_date,
