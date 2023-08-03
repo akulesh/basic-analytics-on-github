@@ -101,4 +101,14 @@ CREATE TABLE ${POSTGRES_SCHEMA}.repo_file_metadata (
     UNIQUE (repo_language, repo_creation_date)
 );
 
+CREATE table ${POSTGRES_SCHEMA}.package (
+    id SERIAL PRIMARY KEY,
+    repo_id BIGINT,
+    language VARCHAR(25),
+    package VARCHAR(255),
+    version VARCHAR(25),
+    operator VARCHAR(5),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 EOSQL

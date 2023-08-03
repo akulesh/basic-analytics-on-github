@@ -85,7 +85,7 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ${PATH_RAW_DATA:-./volumes/data/}:${DOCKER_PATH_RAW_DATA:-/volumes/data}
-    command: "bash /app/src/etl/run.sh"
+    command: "bash /app/src/etl/orchestration/run.sh"
     networks:
       - app
       - prefect
