@@ -46,6 +46,7 @@ def build_deployments(queue=None, pool=None, cron_expr="0 0 * * *", window=7, ve
         parameters={
             "start_date": get_current_date(shift=window),
             "end_date": get_current_date(shift=1),
+            "overwrite_existed_files": True,
         },
         apply=True,
     )

@@ -253,6 +253,7 @@ def run_etl_flow(
     n_last_days: int = 0,
     run_info_flow: bool = True,
     run_contents_flow: bool = True,
+    overwrite_existed_files: bool = False,
     languages: str | list = None,
     info_flow_config: dict = None,
     content_flow_config: dict = None,
@@ -269,6 +270,7 @@ def run_etl_flow(
             start_date=start_date,
             end_date=end_date,
             languages=languages,
+            overwrite_existed_files=overwrite_existed_files,
             **info_flow_config,
             **kwargs,
         )
@@ -280,6 +282,7 @@ def run_etl_flow(
             start_date=start_date,
             end_date=end_date,
             languages=languages,
+            overwrite_existed_files=overwrite_existed_files,
             **content_flow_config,
             **kwargs,
         )
