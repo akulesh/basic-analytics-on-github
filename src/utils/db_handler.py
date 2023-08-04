@@ -108,3 +108,13 @@ class DBHandler:
 
     def read_sql(self, query: str, **kwargs):
         return pd.read_sql(query, con=self.engine, **kwargs)
+
+    @staticmethod
+    def fix_values(values):
+        if not isinstance(values, tuple):
+            values = tuple(values)
+
+        if len(values) == 1:
+            values += values
+
+        return values

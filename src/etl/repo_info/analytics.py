@@ -11,6 +11,44 @@ class RepoInfoAnalytics:
         self.db = db
         self.schema = db.schema
 
+    def update_repo_table(self, table: str = "repo", top_k_values_to_keep: int = 10):
+        q = f"""
+        SELECT license
+        FROM github.repo AS r
+        GROUP BY license
+        ORDER BY count(*) DESC
+        LIMIT {top_k_values_to_keep};
+        """
+        licenses = list(self.db.read_sql(q)["license"])
+        if "__NA__" not in licenses:
+            licenses.append("__NA__")
+        licenses = self.db.fix_values(licenses)
+
+        q = f"""
+        SELECT default_branch
+        FROM github.repo AS r
+        GROUP BY default_branch
+        ORDER BY count(*) DESC
+        LIMIT {top_k_values_to_keep};
+        """
+        branches = list(self.db.read_sql(q)["default_branch"])
+        if "__NA__" not in branches:
+            branches.append("__NA__")
+        branches = self.db.fix_values(branches)
+
+        q = f"""
+        UPDATE {self.schema}.{table}
+        SET license = CASE
+            WHEN license IN {licenses} THEN license
+            ELSE 'Other'
+        END,
+        default_branch = CASE
+            WHEN default_branch IN {branches} THEN default_branch
+            ELSE 'Other'
+        END
+        """
+        self.db.execute(q)
+
     def update_repo_analytics_table(
         self, start_date: str, end_date: str, table: str = "repo_analytics"
     ):
@@ -18,7 +56,6 @@ class RepoInfoAnalytics:
         INSERT INTO {self.schema}.{table} (
             language,
             license,
-            default_branch,
             creation_date,
             creation_year,
             last_commit_date,
@@ -41,10 +78,9 @@ class RepoInfoAnalytics:
         SELECT
             "language",
             license,
-            default_branch,
-            DATE_TRUNC('month', creation_date) AS creation_date,
+            DATE_TRUNC('month', creation_date) AS creation_month_start,
             DATE_PART('year', creation_date) AS creation_year,
-            DATE_TRUNC('month', last_commit_date) AS last_commit_date,
+            DATE_TRUNC('month', last_commit_date) AS last_commit_month_start,
             DATE_PART('year', last_commit_date) AS last_commit_year,
             COUNT(DISTINCT id) AS n_repos,
             COUNT(DISTINCT owner) AS n_owners,
@@ -65,19 +101,18 @@ class RepoInfoAnalytics:
             AND creation_date <= '{end_date}'
         GROUP BY "language",
                  license,
-                 default_branch,
-                 creation_date,
+                 creation_month_start,
                  creation_year,
-                 last_commit_date,
+                 last_commit_month_start,
                  last_commit_year
         """
         self.db.execute(q)
+
         self.db.drop_duplicates(
             table,
             key_columns=[
                 "language",
                 "license",
-                "default_branch",
                 "creation_date",
                 "last_commit_date",
             ],
@@ -98,14 +133,14 @@ class RepoInfoAnalytics:
         SELECT
             r."language",
             topic,
-            DATE_TRUNC('month', creation_date) AS creation_date,
-            DATE_TRUNC('month', last_commit_date) AS last_commit_date,
+            DATE_TRUNC('month', creation_date) AS creation_month_start,
+            DATE_TRUNC('month', last_commit_date) AS last_commit_month_start,
             COUNT(DISTINCT rt.repo_id) AS n_repos
         FROM {self.schema}.repo_topic AS rt
         JOIN {self.schema}.repo AS r ON r.id = rt.repo_id
         WHERE creation_date >= '{start_date}'
             AND creation_date <= '{end_date}'
-        GROUP BY r."language", topic, creation_date, last_commit_date
+        GROUP BY r."language", topic, creation_month_start, last_commit_month_start
         """
         self.db.execute(q)
         self.db.drop_duplicates(
@@ -115,6 +150,10 @@ class RepoInfoAnalytics:
         )
 
     def run(self, start_date: str, end_date: str = None):
+        logger.info("Updating 'repo' table...")
+        self.update_repo_table()
+        logger.info("✅ Table has been updated!")
+
         end_date = end_date or start_date
         logger.info("Updating 'topic_analytics' table...")
         self.update_topic_analytics_table(start_date, end_date)

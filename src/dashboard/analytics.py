@@ -10,16 +10,6 @@ class DataAnalytics:
         self.db = db
         self.schema = db.schema
 
-    @staticmethod
-    def _fix_values(values):
-        if not isinstance(values, tuple):
-            values = tuple(values)
-
-        if len(values) == 1:
-            values += values
-
-        return values
-
     def _get_conditions(
         self,
         table=None,
@@ -52,11 +42,11 @@ class DataAnalytics:
                 )
             )
         if languages:
-            languages = self._fix_values(languages)
+            languages = self.db.fix_values(languages)
             conditions.append(f'"language" IN {languages}')
 
         if licenses:
-            licenses = self._fix_values(licenses)
+            licenses = self.db.fix_values(licenses)
             conditions.append(f"license IN {licenses}")
 
         if exclude_archived:
@@ -72,7 +62,7 @@ class DataAnalytics:
             conditions.append("topic != '__NA__'")
 
         if topics:
-            topics = self._fix_values(topics)
+            topics = self.db.fix_values(topics)
             conditions.append(f"topic IN {topics}")
 
         if table:
@@ -125,7 +115,7 @@ class DataAnalytics:
     def get_repos_with_packages(self, packages: tuple):
         query = f"""
         SELECT repo_id FROM {self.schema}.package
-        WHERE package IN {self._fix_values(packages)}
+        WHERE package IN {self.db.fix_values(packages)}
         GROUP BY repo_id
         HAVING COUNT(*) = {len(packages)}
         """

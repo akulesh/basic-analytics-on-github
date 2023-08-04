@@ -31,6 +31,29 @@ class PythonPackagesExtractor:
 
         return match.group() if match else str()
 
+    @staticmethod
+    def extract_package_info(line):
+        # Define the regular expression pattern
+        pattern = r"^\s*([\w\-]+)\s*([><=~]+)?\s*([\w\d\.]+)?\s*(.*?)\s*(;.*)?$"
+        # Remove comments from the line
+        line_without_comment = re.sub(r"#.*$", "", line)
+
+        # Match the pattern against the cleaned line
+        match = re.match(pattern, line_without_comment)
+
+        if not match:
+            return (None, None, None)
+        package = match[1]
+        operator = match[2] or None
+        version = match[3] or None
+
+        version_operators = ["~=", ">=", "<=", "==", ">", "<"]
+
+        if operator and operator not in version_operators:
+            operator = None
+
+        return (package, operator, version)
+
     def parse_content(self, content: str, repo_id: str = None, language: str = None) -> list:
         packages_list = []
         content = decode_content(content)
@@ -44,33 +67,16 @@ class PythonPackagesExtractor:
         for line in lines:
             # Ignore lines that do not start with a letter (ignoring comments and empty lines)
             if line.strip() and line[0].isalpha():
-                # Split each line by the first occurrence of the version comparison operator
-                version_operators = ["~=", ">=", "<=", "==", ">", "<"]
-                package_info = [line]
-                for operator in version_operators:
-                    if operator in line:
-                        package_info = line.split(operator, 1)
-                        package_name = package_info[0].strip()
-                        package_version = (
-                            self.extract_version(package_info[1].strip())
-                            if len(package_info) == 2
-                            else ""
-                        )
-                        package_operator = operator
-                        break
-                else:
-                    package_name = package_info[0].split("@")[0].strip()
-                    package_version = ""
-                    package_operator = None
+                package, operator, version = self.extract_package_info(line)
 
                 # Check if the line contains package and version information
-                if package_name:
+                if package:
                     package_dict = {
                         "repo_id": repo_id,
                         "language": language,
-                        "package": package_name,
-                        "version": package_version,
-                        "operator": package_operator,
+                        "package": package,
+                        "version": version,
+                        "operator": operator,
                     }
                     packages_list.append(package_dict)
 
