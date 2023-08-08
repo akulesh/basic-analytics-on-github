@@ -1,3 +1,5 @@
+# FIXME: versions
+
 import os
 import re
 from glob import glob
@@ -128,6 +130,7 @@ class PythonPackagesExtractor:
             )
             for filename in tqdm(filenames, total=len(filenames)):
                 if os.path.exists(filename):
+                    logger.info(f"File: '{filename}'")
                     input_df = pd.read_parquet(filename)
                     if "content" not in input_df.columns:
                         continue
