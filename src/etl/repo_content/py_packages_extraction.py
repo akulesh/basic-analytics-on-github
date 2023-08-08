@@ -95,12 +95,16 @@ class PythonPackagesExtractor:
             axis=0,
             ignore_index=True,
         )
-        df["version"] = df["version"].fillna("0.0.0").astype(str)
-        return (
-            df.sort_values("version")
-            .drop_duplicates(subset=["repo_id", "package"], keep="last")
-            .reset_index(drop=True)
-        )
+
+        if not df.empty:
+            df["version"] = df["version"].fillna("0.0.0").astype(str)
+            df = (
+                df.sort_values("version")
+                .drop_duplicates(subset=["repo_id", "package"], keep="last")
+                .reset_index(drop=True)
+            )
+
+        return df
 
     def get_filenames(
         self, input_dir: str, language: str, start_date: str = None, end_date: str = None
@@ -129,19 +133,21 @@ class PythonPackagesExtractor:
                 input_dir, language, start_date=start_date, end_date=end_date
             )
             for filename in tqdm(filenames, total=len(filenames)):
-                if os.path.exists(filename):
-                    logger.info(f"File: '{filename}'")
-                    input_df = pd.read_parquet(filename)
-                    if "content" not in input_df.columns:
-                        continue
-
-                    output_df = self.prepare(
-                        input_df, language=SUPPORTED_LANGUAGES.get(language, language)
-                    )
-                    db.update_table(output_df, TARGET_TABLE)
-
-                else:
+                if not os.path.exists(filename):
                     logger.warning(f"File '{filename}' does not exist.")
+                    continue
+
+                logger.info(f"File: '{filename}'")
+                input_df = pd.read_parquet(filename)
+                if "content" not in input_df.columns:
+                    logger.warning(f"File '{filename}' is empty.")
+                    continue
+
+                output_df = self.prepare(
+                    input_df, language=SUPPORTED_LANGUAGES.get(language, language)
+                )
+                if not output_df.empty:
+                    db.update_table(output_df, TARGET_TABLE)
 
             logger.info(f"✅ Processing completed for '{language}'!")
 
