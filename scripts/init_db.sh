@@ -111,4 +111,8 @@ CREATE table ${POSTGRES_SCHEMA}.package (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX stars_idx ON ${POSTGRES_SCHEMA}.repo (stars DESC);
+CREATE INDEX topic_idx ON ${POSTGRES_SCHEMA}.repo_topic (topic);
+CREATE INDEX repo_id_idx ON ${POSTGRES_SCHEMA}.repo ("id");
+
 EOSQL
