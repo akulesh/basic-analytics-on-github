@@ -57,6 +57,31 @@ def add_date_picker(min_date_year, max_date_year, key_prefix="creation_date"):
     return start_date, end_date
 
 
+def add_date_selector(key_prefix="creation_date"):
+    current_date = datetime.now()
+    last_month = current_date.month - 1
+    last_month_last_day = calendar.monthrange(current_date.year, current_date.month)[1]
+    period_mapping = {
+        "All date range": None,
+        "Last year": (
+            datetime(year=current_date.year - 1, month=1, day=1),
+            datetime(year=current_date.year - 1, month=12, day=31),
+        ),
+        "Last month": (
+            datetime(year=current_date.year, month=last_month, day=1),
+            datetime(year=current_date.year, month=last_month, day=last_month_last_day),
+        ),
+        "Current month": (
+            datetime(year=current_date.year, month=current_date.month, day=1),
+            current_date,
+        ),
+    }
+
+    period = st.sidebar.selectbox(f"📆 Repository `{key_prefix}`", period_mapping.keys())
+
+    return period_mapping[period]
+
+
 def add_multiselect(
     f,
     options: list,

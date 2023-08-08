@@ -15,7 +15,7 @@ from src.dashboard.blocks import (
     add_package_explorer,
     add_repo_explorer,
 )
-from src.dashboard.utils import add_date_picker, add_multiselect, clear_cache
+from src.dashboard.utils import add_date_selector, add_multiselect, clear_cache
 from src.utils.api import SUPPORTED_LANGUAGES
 from src.utils.db_handler import DBHandler
 
@@ -74,17 +74,9 @@ class Dashboard:
 
         clear_cache()
 
-        min_year, max_year = int(self.filters_df["creation_start_year"].min()), int(
-            self.filters_df["creation_end_year"].max()
-        )
-        creation_date_range = add_date_picker(min_year, max_year)
+        creation_date_range = add_date_selector()
+        last_commit_date_range = add_date_selector(key_prefix="last_commit_date")
 
-        min_year, max_year = int(self.filters_df["last_commit_start_year"].min()), int(
-            self.filters_df["last_commit_end_year"].max()
-        )
-        last_commit_date_range = add_date_picker(min_year, max_year, key_prefix="last_commit_date")
-
-        st.sidebar.header("🌐 Primary Language")
         language_list = [
             lang for lang in self.filters_df["language"] if lang in SUPPORTED_LANGUAGES.values()
         ]
@@ -92,6 +84,7 @@ class Dashboard:
             f=st.sidebar,
             options=language_list,
             entity="language",
+            title="🌐 Primary Language",
             default=language_list,
             add_reset_button=True,
             reset_button_name="Select All",
