@@ -204,6 +204,17 @@ class DataAnalytics:
                 r.last_commit_date
             FROM {self.schema}.repo AS r"""
 
+        subqueries = {}
+        if packages:
+            package_subquery = f"""
+                package_repos AS (
+                    SELECT repo_id FROM {self.schema}.package
+                WHERE package IN {self.db.fix_values(packages)}
+                GROUP BY repo_id
+                HAVING COUNT(*) = {len(packages)}
+                )"""
+            subqueries["package_repos"] = package_subquery
+
         if topics or exclude_without_topic:
             conditions = self._get_conditions(
                 table="rt",
@@ -213,17 +224,22 @@ class DataAnalytics:
             )
 
             expr = "".join(f" AND {cond}" for cond in conditions)
-            cte = f"""
-            WITH filtered_repos AS (
-                SELECT DISTINCT repo_id
-                FROM {self.schema}.repo_topic AS rt
-                WHERE TRUE
-                    {expr}
-            )
+            topic_subquery = f"""
+                filtered_repos AS (
+                    SELECT DISTINCT repo_id
+                    FROM {self.schema}.repo_topic AS rt
+                    WHERE TRUE
+                        {expr}
+                )
             """
+            subqueries["filtered_repos"] = topic_subquery
 
-            query = f"""{cte} {query}
-            JOIN filtered_repos AS fr ON r.id = fr.repo_id"""
+        if subqueries:
+            cte = f"WITH {','.join(subqueries.values())}"
+            query = f"""{cte} {query}"""
+
+            for sq in subqueries:
+                query += f"\nJOIN {sq} ON r.id = {sq}.repo_id"
 
         conditions = self._get_conditions(
             table="r",
@@ -255,11 +271,6 @@ class DataAnalytics:
 
         data = self.db.read_sql(query)
         data["topics"] = data["topics"].replace("", "__NA__").str.split("|")
-
-        if packages:
-            repos_with_packages = self.get_repos_with_packages(packages)
-            data = data[data["repo_id"].isin(repos_with_packages)]
-
         del data["repo_id"]
 
         return data
