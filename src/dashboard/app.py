@@ -85,7 +85,7 @@ class Dashboard:
             options=language_list,
             entity="language",
             title="🌐 Primary Language",
-            default=language_list,
+            default=None,
             add_reset_button=True,
             reset_button_name="Select All",
         )

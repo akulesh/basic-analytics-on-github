@@ -27,20 +27,12 @@ class DataAnalytics:
 
         if creation_date_range:
             start_date, end_date = creation_date_range
-            conditions.extend(
-                (
-                    f"creation_date >= '{start_date}'",
-                    f"creation_date <= '{end_date}'",
-                )
-            )
+            conditions.extend((f"creation_date BETWEEN '{start_date}' AND '{end_date}'",))
+
         if last_commit_date_range:
             start_date, end_date = last_commit_date_range
-            conditions.extend(
-                (
-                    f"last_commit_date >= '{start_date}'",
-                    f"last_commit_date <= '{end_date}'",
-                )
-            )
+            conditions.extend((f"last_commit_date BETWEEN '{start_date}' AND '{end_date}'",))
+
         if languages:
             languages = self.db.fix_values(languages)
             conditions.append(f'"language" IN {languages}')
@@ -180,8 +172,8 @@ class DataAnalytics:
 
     def get_repo_report(
         self,
-        creation_date_range: str = None,
-        last_commit_date_range: str = None,
+        creation_date_range: tuple = None,
+        last_commit_date_range: tuple = None,
         languages: list = None,
         topics: list = None,
         licenses: list = None,
@@ -191,29 +183,47 @@ class DataAnalytics:
         exclude_without_wiki: bool = False,
         exclude_without_topic: bool = False,
         exclude_without_license: bool = False,
-        limit=None,
+        limit: int = 10000,
     ):
-        query = f"""
-        SELECT DISTINCT r.id AS repo_id,
-            r."name",
-            r.url,
-            r."language",
-            r.stars,
-            r.forks,
-            r.open_issues,
-            r.archived,
-            r.has_wiki,
-            r.description,
-            r.license,
-            r.topics,
-            r."owner",
-            r.days_since_creation,
-            r.days_since_last_commit,
-            r.creation_date,
-            r.last_commit_date
-        FROM {self.schema}.repo AS r
-        JOIN {self.schema}.repo_topic AS rt ON r.id = rt.repo_id
-        """
+        query = f"""SELECT DISTINCT r.id AS repo_id,
+                r."name",
+                r.url,
+                r."language",
+                r.stars,
+                r.forks,
+                r.open_issues,
+                r.archived,
+                r.has_wiki,
+                r.description,
+                r.license,
+                r.topics,
+                r."owner",
+                r.days_since_creation,
+                r.days_since_last_commit,
+                r.creation_date,
+                r.last_commit_date
+            FROM {self.schema}.repo AS r"""
+
+        if topics or exclude_without_topic:
+            conditions = self._get_conditions(
+                table="rt",
+                topics=topics,
+                languages=languages,
+                exclude_without_topic=exclude_without_topic,
+            )
+
+            expr = "".join(f" AND {cond}" for cond in conditions)
+            cte = f"""
+            WITH filtered_repos AS (
+                SELECT DISTINCT repo_id
+                FROM {self.schema}.repo_topic AS rt
+                WHERE TRUE
+                    {expr}
+            )
+            """
+
+            query = f"""{cte} {query}
+            JOIN filtered_repos AS fr ON r.id = fr.repo_id"""
 
         conditions = self._get_conditions(
             table="r",
@@ -226,18 +236,22 @@ class DataAnalytics:
             exclude_without_wiki=exclude_without_wiki,
         )
 
-        topic_conditions = self._get_conditions(
-            table="rt", topics=topics, exclude_without_topic=exclude_without_topic
-        )
-        conditions.extend(topic_conditions)
-
         if conditions:
-            query += "\tWHERE " + "\n\t\tAND ".join(conditions)
+            expr = "WHERE " + "\n\t\tAND ".join(conditions)
+            query = f"""
+            {query}
+            {expr}"""
 
-        query += f"\n\tORDER BY r.{sort_by} DESC"
+        expr = f"ORDER BY r.{sort_by} DESC"
+        query = f"""
+            {query}
+            {expr}"""
 
         if limit:
-            query += f"\n\tLIMIT {limit}"
+            expr = f"LIMIT {limit}"
+            query = f"""
+            {query}
+            {expr}"""
 
         data = self.db.read_sql(query)
         data["topics"] = data["topics"].replace("", "__NA__").str.split("|")

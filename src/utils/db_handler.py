@@ -107,6 +107,7 @@ class DBHandler:
         return pd.read_sql(q, con=self.engine)
 
     def read_sql(self, query: str, **kwargs):
+        logger.info(query)
         return pd.read_sql(query, con=self.engine, **kwargs)
 
     @staticmethod

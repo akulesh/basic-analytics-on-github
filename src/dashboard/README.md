@@ -20,7 +20,8 @@ conda env remove --name=$EVN_NAME
 ```
 source .env
 export POSTGRES_HOST=0.0.0.0
-PYTHONPATH=. streamlit run src/dashboard/app.py
+export STREAMLIT_PORT=8502
+PYTHONPATH=. streamlit run src/dashboard/app.py --server.port=$STREAMLIT_PORT
 ```
 
 # References:
