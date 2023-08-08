@@ -129,6 +129,9 @@ class PythonPackagesExtractor:
             for filename in tqdm(filenames, total=len(filenames)):
                 if os.path.exists(filename):
                     input_df = pd.read_parquet(filename)
+                    if "content" not in input_df.columns:
+                        continue
+
                     output_df = self.prepare(
                         input_df, language=SUPPORTED_LANGUAGES.get(language, language)
                     )

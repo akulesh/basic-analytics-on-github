@@ -206,6 +206,7 @@ def run_repo_content_flow(
     db_config: dict = None,
     **kwargs,
 ):
+    languages = get_languages(languages)
     source_dir = os.path.join(source_dir, "repos")
     print(f"Source directory: {source_dir}")
 
