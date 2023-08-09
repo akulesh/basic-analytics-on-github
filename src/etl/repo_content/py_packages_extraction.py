@@ -36,7 +36,7 @@ class PythonPackagesExtractor:
     @staticmethod
     def extract_package_info(line):
         # Define the regular expression pattern
-        pattern = r"^\s*([\w\-]+)\s*([><=~]+)?\s*([\w\d\.]+)?\s*(.*?)\s*(;.*)?$"
+        pattern = r"^\s*([\w\-\.]+)\s*([><=~]+)?\s*([\w\d\.]+)?\s*(.*?)\s*(;.*)?$"
         # Remove comments from the line
         line_without_comment = re.sub(r"#.*$", "", line)
 
