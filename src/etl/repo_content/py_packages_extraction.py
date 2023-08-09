@@ -99,7 +99,7 @@ class PythonPackagesExtractor:
         if not df.empty:
             # FIXME
             df["version"] = df["version"].fillna("0.0.0").astype(str)
-            df.loc[df["version"].str.len() <= 25, "version"] = None
+            df.loc[df["version"].str.len() > 25, "version"] = None
             df = (
                 df.sort_values("version")
                 .drop_duplicates(subset=["repo_id", "package"], keep="last")
