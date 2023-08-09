@@ -56,7 +56,7 @@ def get_headers(api_token=None):
 def decode_content(content):
     try:
         text = base64.b64decode(content).decode("utf-8")
-    except UnicodeDecodeError:
+    except Exception:
         text = None
 
     return text
