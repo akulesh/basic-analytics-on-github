@@ -168,7 +168,7 @@ class RepoInfoTransformer:
                 if os.path.exists(filename):
                     data = self.process_file(filename)
                     data.loc[:, "lang_alias"] = lang
-                    data["language"] = data["language"].fillna(SUPPORTED_LANGUAGES[lang])
+                    data["language"] = SUPPORTED_LANGUAGES[lang]
                     self.update_tables(db=db, data=data)
                 else:
                     logger.warning(f"File '{filename}' does not exist.")

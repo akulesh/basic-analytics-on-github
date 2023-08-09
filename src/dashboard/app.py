@@ -44,7 +44,7 @@ def get_packages_data(_da: DataAnalytics):
 class Dashboard:
     """Streamlit-based dashboard with GitHub analytics"""
 
-    def __init__(self, db_username=None, db_password=None, min_topic_freq=1, **kwargs):
+    def __init__(self, db_username=None, db_password=None, min_topic_freq=10, **kwargs):
         self.da = create_data_session(db_username=db_username, db_password=db_password, **kwargs)
         self.filters_df = get_filters_info(self.da)
         self.topics_df = get_topics_data(self.da)
@@ -52,7 +52,7 @@ class Dashboard:
         self.min_topic_freq = min_topic_freq
 
     @staticmethod
-    def get_packages(data, threshold: int = 1):
+    def get_packages(data, threshold: int = 10):
         data = data[data["freq"] >= threshold]
         return list(data["package"].dropna())
 
@@ -61,13 +61,14 @@ class Dashboard:
         stats = data.groupby("license")["n_repos"].sum().sort_values(ascending=False)
         return list(stats.keys())
 
-    def filter_topics_df(self, language_list, lang_filter):
-        if len(language_list) != len(lang_filter):
-            topics_df = self.topics_df[self.topics_df["language"].isin(lang_filter)]
-        else:
-            topics_df = self.topics_df
+    def filter_topics_df(self, language_list, lang_filter=None):
+        values = lang_filter or language_list
+        topics_df = self.topics_df[self.topics_df["n_repos"] >= self.min_topic_freq]
 
-        return topics_df[topics_df["n_repos"] >= self.min_topic_freq]
+        if len(language_list) != len(values):
+            topics_df = self.topics_df[self.topics_df["language"].isin(lang_filter)]
+
+        return topics_df
 
     def build(self):
         add_intro_block(self.filters_df)
@@ -95,7 +96,7 @@ class Dashboard:
             last_commit_date_range=last_commit_date_range,
             languages=lang_filter,
         )
-        topics_df = self.filter_topics_df(language_list, lang_filter)
+        topics_df = self.filter_topics_df(language_list, lang_filter=lang_filter)
 
         kpi_report = self.da.get_kpi_report(repos_df, topics_df)
         add_kpi_block(kpi_report)

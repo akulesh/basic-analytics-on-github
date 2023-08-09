@@ -1,76 +1,73 @@
-import calendar
 from datetime import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from dateutil.relativedelta import relativedelta
 from wordcloud import WordCloud
 
 
-def add_date_picker(min_date_year, max_date_year, key_prefix="creation_date"):
-    st.sidebar.header(f"📆 Repository `{key_prefix}`")
+# def add_date_picker(min_date_year, max_date_year, key_prefix="creation_date"):
+#     st.sidebar.header(f"📆 Repository `{key_prefix}`")
 
-    def clear():
-        st.session_state[f"{key_prefix}_start_year"] = min_date_year
-        st.session_state[f"{key_prefix}_end_year"] = max_date_year
-        st.session_state[f"{key_prefix}_start_month"] = 1
-        st.session_state[f"{key_prefix}_end_month"] = 12
+#     def clear():
+#         st.session_state[f"{key_prefix}_start_year"] = min_date_year
+#         st.session_state[f"{key_prefix}_end_year"] = max_date_year
+#         st.session_state[f"{key_prefix}_start_month"] = 1
+#         st.session_state[f"{key_prefix}_end_month"] = 12
 
-    # Initialize the date range in session state
-    if (f"{key_prefix}_start_year" not in st.session_state) or (
-        f"{key_prefix}_end_year" not in st.session_state
-    ):
-        clear()
+#     # Initialize the date range in session state
+#     if (f"{key_prefix}_start_year" not in st.session_state) or (
+#         f"{key_prefix}_end_year" not in st.session_state
+#     ):
+#         clear()
 
-    cols = st.sidebar.columns(2)
-    with cols[0]:
-        st.selectbox(
-            "Start Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_start_year"
-        )
-        st.selectbox(
-            "End Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_end_year"
-        )
+#     cols = st.sidebar.columns(2)
+#     with cols[0]:
+#         st.selectbox(
+#             "Start Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_start_year"
+#         )
+#         st.selectbox(
+#             "End Year", range(min_date_year, max_date_year + 1), key=f"{key_prefix}_end_year"
+#         )
 
-    with cols[1]:
-        st.selectbox("Start Month", range(1, 13), key=f"{key_prefix}_start_month")
-        st.selectbox("End Month", range(1, 13), key=f"{key_prefix}_end_month")
+#     with cols[1]:
+#         st.selectbox("Start Month", range(1, 13), key=f"{key_prefix}_start_month")
+#         st.selectbox("End Month", range(1, 13), key=f"{key_prefix}_end_month")
 
-    # Add a reset button
-    st.sidebar.button("Select All", on_click=clear, key=f"{key_prefix}_date_reset")
+#     # Add a reset button
+#     st.sidebar.button("Select All", on_click=clear, key=f"{key_prefix}_date_reset")
 
-    (start_year, start_month), (end_year, end_month) = (
-        int(st.session_state[f"{key_prefix}_start_year"]),
-        int(st.session_state[f"{key_prefix}_start_month"]),
-    ), (
-        int(st.session_state[f"{key_prefix}_end_year"]),
-        int(st.session_state[f"{key_prefix}_end_month"]),
-    )
+#     (start_year, start_month), (end_year, end_month) = (
+#         int(st.session_state[f"{key_prefix}_start_year"]),
+#         int(st.session_state[f"{key_prefix}_start_month"]),
+#     ), (
+#         int(st.session_state[f"{key_prefix}_end_year"]),
+#         int(st.session_state[f"{key_prefix}_end_month"]),
+#     )
 
-    start_date = datetime(year=start_year, month=start_month, day=1)
-    last_day = calendar.monthrange(end_year, end_month)[1]
-    end_date = datetime(year=end_year, month=end_month, day=last_day)
+#     start_date = datetime(year=start_year, month=start_month, day=1)
+#     last_day = calendar.monthrange(end_year, end_month)[1]
+#     end_date = datetime(year=end_year, month=end_month, day=last_day)
 
-    if start_date > end_date:
-        raise ValueError("'start_date' must be less then the 'end_date'")
+#     if start_date > end_date:
+#         raise ValueError("'start_date' must be less then the 'end_date'")
 
-    return start_date, end_date
+#     return start_date, end_date
 
 
 def add_date_selector(key_prefix="creation_date"):
     current_date = datetime.now()
-    last_month = current_date.month - 1
-    last_month_last_day = calendar.monthrange(current_date.year, current_date.month)[1]
+    last_month = (current_date - relativedelta(months=1)).month
     period_mapping = {
         "All date range": None,
-        "Last year": (
-            datetime(year=current_date.year - 1, month=1, day=1),
-            datetime(year=current_date.year - 1, month=12, day=31),
+        "Last 12 months": (
+            datetime(year=current_date.year - 1, month=current_date.month, day=1),
+            current_date,
         ),
-        "Last month": (
-            datetime(year=current_date.year, month=last_month, day=1),
-            datetime(year=current_date.year, month=last_month, day=last_month_last_day),
-        ),
+        "Current year": (datetime(year=current_date.year, month=1, day=1), current_date),
+        "Last month": (datetime(year=current_date.year, month=last_month, day=1), current_date),
         "Current month": (
             datetime(year=current_date.year, month=current_date.month, day=1),
             current_date,
